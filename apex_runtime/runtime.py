@@ -7,8 +7,9 @@ from enum import Enum
 from threading import RLock
 from typing import Deque, Dict, Iterable, List, Optional
 
-from .config import RuntimeConfig
+from .config import RuntimeConfig, validate_runtime_config
 from .errors import APEXError, ErrorCategory, ErrorSeverity, validation_error
+from .policy import validate_numerical_policy
 
 
 class RuntimePhase(str, Enum):
@@ -85,6 +86,8 @@ class ApexRuntime:
     def startup(self, measured_drift_ms: int = 0, vendor_ok: bool = True, llm_ok: bool = True, snapshot_timestamp: Optional[datetime] = None) -> RuntimeState:
         with self._lock:
             self.state.phase = RuntimePhase.PREFLIGHT
+            validate_runtime_config(self.config)
+            validate_numerical_policy(self.config.numerical_policy)
             self._check_clock(measured_drift_ms)
             self._audit(AuditEvent.PRE_FLIGHT_COMPLETE)
 

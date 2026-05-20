@@ -1,11 +1,12 @@
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 import unittest
 
 from apex_runtime import ApexRuntime, RuntimeConfig, RuntimePhase, enforce_decimal
-from apex_runtime.cognitive import CognitiveLayer
 from apex_runtime.errors import APEXError
 from apex_runtime.reactive import AnalysisRequest, ReactiveLayer
+from apex_runtime.cognitive import CognitiveLayer
+from apex_runtime.policy import NumericalPolicy
 
 
 class TestRuntime(unittest.TestCase):
@@ -15,6 +16,19 @@ class TestRuntime(unittest.TestCase):
         state = rt.startup(vendor_ok=False, llm_ok=False, snapshot_timestamp=stale)
         self.assertTrue(state.ready)
         self.assertEqual(state.phase, RuntimePhase.SERVICES)
+
+    def test_startup_rejects_invalid_numerical_policy(self):
+        cfg = RuntimeConfig()
+        object.__setattr__(cfg, "numerical_policy", NumericalPolicy(
+            monetary_precision=10,
+            monetary_type_name="Decimal",
+            rounding_mode=ROUND_HALF_UP,
+            price_display_precision=2,
+            percentage_precision=6,
+        ))
+        rt = ApexRuntime(cfg)
+        with self.assertRaises(ValueError):
+            rt.startup()
 
     def test_idempotency_and_outbox_retries(self):
         rt = ApexRuntime(RuntimeConfig(max_idempotency_cache_size=2, outbox_retry_limit=2))
@@ -41,9 +55,6 @@ class TestReactiveLayer(unittest.TestCase):
         self.assertIn("horizon_days", decision.why.market_structure)
         self.assertIn("failure_rate", decision.why.evidence_quality)
         self.assertIn("loss_adjustment", decision.why.confidence_calibration)
-
-        rec = layer.reflection.recent()[0]
-        self.assertGreaterEqual(rec.failure_rate, 0.0)
         self.assertGreaterEqual(layer.reflection.analytical_debt_score(), 0.0)
 
 

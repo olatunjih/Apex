@@ -6,6 +6,7 @@ from .reactive import AnalysisRequest, IntentRouter, ReactiveDecision, ReactiveL
 from .errors import APEXError, ErrorCategory, ErrorSeverity
 from .numerics import MonetaryValue, enforce_decimal
 from .runtime import ApexRuntime, RuntimeEvent, RuntimePhase, RuntimeState
+from .policy import NumericalPolicy, DEFAULT_NUMERICAL_POLICY, serialize_decimal
 from .why_engine import WhyContext, WhyEngine, WhyExplanation
 from .reflection import ReflectionLayer, ReflectionRecord
 
@@ -29,6 +30,9 @@ __all__ = [
     "ReactiveDecision",
     "ReactiveLayer",
     "WhyLayer",
+    "NumericalPolicy",
+    "DEFAULT_NUMERICAL_POLICY",
+    "serialize_decimal",
     "WhyContext",
     "WhyEngine",
     "WhyExplanation",
