@@ -21,21 +21,26 @@ wheels/
 .installed.cfg
 *.egg
 
-# Compiled and build artifacts
-*.pyc
-__pycache__/
-
-# Logs and temp files
-*.log
-*.tmp
-*.swp
-
 # Environment
 .env
 .env.local
-*.env.*
+.env.*
+.venv/
+venv/
+ENV/
 
-# Editors
+# IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+*.tmp
+
+# Logs
+*.log
+
+# Coverage
+.coverage
+coverage/
+htmlcov/
 ```
