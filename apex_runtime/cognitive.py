@@ -6,6 +6,8 @@ from statistics import mean
 from threading import RLock
 from typing import Dict, List, Optional, Any
 
+from .errors import validation_error
+
 
 @dataclass(frozen=True)
 class MemoryRecord:
