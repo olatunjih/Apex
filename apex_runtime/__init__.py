@@ -1,7 +1,7 @@
 """APEX runtime package."""
 
 from .cognitive import CognitiveLayer, CognitiveState, FailureRecord, MemoryRecord
-from .config import RuntimeConfig
+from .config import RuntimeConfig, validate_runtime_config
 from .reactive import AnalysisRequest, IntentRouter, ReactiveDecision, ReactiveLayer, WhyLayer
 from .errors import APEXError, ErrorCategory, ErrorSeverity
 from .numerics import MonetaryValue, enforce_decimal
@@ -49,10 +49,17 @@ from .tools import (  # Tools moved to separate module - imports below
 )
 
 # Memory Management (Section 1.7)
-from .memory_guard import MemoryGuard, MemorySnapshot, MemoryStats, BoundedCache
+from .memory_guard import MemoryGuard, MemorySnapshot, MemoryAlert, BoundedCache, DEFAULT_MEMORY_GUARD
 
 # Health & Signals (Sections 1.5, 1.8)
-from .health_signals import HealthCheckSystem, HealthStatus, SignalHandler
+from .health import HealthChecker, HealthCheckResult, HealthResponse, start_health_server, DEFAULT_HEALTH_CHECKER
+from .signal_handler import SignalHandler, SignalHandlerContext, DEFAULT_SIGNAL_HANDLER
+
+# Observability (Section 32)
+from .observability import (
+    StructuredLogger, LogRedactor, MetricsRegistry, Tracer, CostTracker,
+    DEFAULT_METRICS, DEFAULT_TRACER, DEFAULT_COST_TRACKER
+)
 
 __all__ = [
     # Original exports
@@ -160,11 +167,24 @@ __all__ = [
     # Memory Management (Section 1.7)
     "MemoryGuard",
     "MemorySnapshot",
-    "MemoryStats",
+    "MemoryAlert",
     "BoundedCache",
     
     # Health & Signals (Sections 1.5, 1.8)
-    "HealthCheckSystem",
-    "HealthStatus",
-    "SignalHandler"
+    "HealthChecker",
+    "HealthCheckResult",
+    "HealthResponse",
+    "SignalHandler",
+    "SignalHandlerContext",
+    
+    # Observability (Section 32)
+    "StructuredLogger",
+    "LogRedactor",
+    "MetricsRegistry",
+    "Tracer",
+    "CostTracker",
+    
+    # Additional exports
+    "validate_runtime_config",
+    "ApexRuntime",
 ]
