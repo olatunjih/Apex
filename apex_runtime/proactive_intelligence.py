@@ -66,10 +66,11 @@ class LearningEngine:
     Continuously learns from market data, decisions, and outcomes
     """
     
-    def __init__(self):
+    def __init__(self, persistence_enabled: bool = False):
         self.patterns: Dict[str, LearnedPattern] = {}
         self.learning_events: List[Dict[str, Any]] = []
         self.pattern_counter = 0
+        self.persistence_enabled = persistence_enabled
         
     def register_pattern(self, pattern_type: PatternType, description: str,
                         initial_confidence: Decimal, tickers: List[str],

@@ -73,10 +73,11 @@ class SecondOrderAnalysis:
     Identifies and evaluates indirect consequences of decisions/events
     """
     
-    def __init__(self):
+    def __init__(self, context_aware: bool = True):
         self.effects_registry: Dict[str, SecondOrderEffect] = {}
         self.causal_chains: List[CausalChain] = []
         self.effect_counter = 0
+        self.context_aware = context_aware
         
     def analyze_decision(self, decision: str, context: Dict[str, Any],
                         ticker_intelligence: Dict[str, TickerIntelligenceFile]) -> List[SecondOrderEffect]:
@@ -245,11 +246,12 @@ class NarrativeAgent:
     Ensures analytical narratives remain consistent across sessions and components
     """
     
-    def __init__(self):
+    def __init__(self, enforcement_mode: str = "strict"):
         self.narrative_log: List[Dict[str, Any]] = []
         self.inconsistencies: List[NarrativeInconsistency] = []
         self.inconsistency_counter = 0
         self.narrative_state: Dict[str, str] = {}  # topic -> current narrative
+        self.enforcement_mode = enforcement_mode
         
     def record_narrative(self, topic: str, narrative: str, epistemic_state: EpistemicState,
                         confidence: ConfidenceLevel, source: str):

@@ -12,6 +12,15 @@ import math
 from ..errors import APEXError, ErrorCategory, ErrorSeverity
 from ..numerics import enforce_decimal
 
+# Forward declarations to avoid circular import
+ToolMetadata = None
+ToolResult = None
+
+def _init_tool_classes(metadata_cls, result_cls):
+    global ToolMetadata, ToolResult
+    ToolMetadata = metadata_cls
+    ToolResult = result_cls
+
 # Data Registry
 class DataRegistry:
     def __init__(self, max_memory_mb: int = 500):
@@ -51,6 +60,19 @@ class ToolResult(Generic[T]):
 class BaseTool:
     name: str = "base_tool"
     description: str = "Base tool"
+    
+    def get_metadata(self) -> ToolMetadata:
+        return ToolMetadata(
+            tool_id=self.name,
+            name=self.name,
+            version="1.0.0",
+            description=self.description,
+            input_schema=(),
+            output_schema=(),
+            stateless=True,
+            llm_free=True
+        )
+    
     def validate_inputs(self, **kwargs): pass
     def execute(self, **kwargs) -> ToolResult: raise NotImplementedError
 

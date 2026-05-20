@@ -56,9 +56,11 @@ class StructuredLogRecord:
         return json.dumps(asdict(self), default=str)
 
 class StructuredLogger(logging.Logger):
-    def __init__(self, name: str, component: str = "UNKNOWN"):
+    def __init__(self, name: str, component: str = "UNKNOWN", session_id: str = "global"):
         super().__init__(name)
         self.component = component
+        self._session_id = session_id
+        self._trace_id = str(uuid.uuid4())
         self.addFilter(LogRedactor())
         
         handler = logging.StreamHandler()
@@ -67,9 +69,9 @@ class StructuredLogger(logging.Logger):
         self.setLevel(logging.INFO)
 
     def _log(self, level, msg, extra=None, **kwargs):
-        trace_id = kwargs.pop('trace_id', getattr(self, '_trace_id', str(uuid.uuid4())))
+        trace_id = kwargs.pop('trace_id', self._trace_id)
         span_id = kwargs.pop('span_id', str(uuid.uuid4()))
-        session_id = kwargs.pop('session_id', getattr(self, '_session_id', 'global'))
+        session_id = kwargs.pop('session_id', self._session_id)
         
         record = StructuredLogRecord(
             timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
