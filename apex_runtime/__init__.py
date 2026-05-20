@@ -48,6 +48,12 @@ from .tools import (
     DataValidationTool, ToolRegistry, create_standard_tool_registry
 )
 
+# Memory Management (Section 1.7)
+from .memory_guard import MemoryGuard, MemorySnapshot, MemoryStats, BoundedCache
+
+# Health & Signals (Sections 1.5, 1.8)
+from .health_signals import HealthCheckSystem, HealthStatus, SignalHandler
+
 __all__ = [
     # Original exports
     "RuntimeConfig",
@@ -150,5 +156,16 @@ __all__ = [
     "VolatilityCalculationTool",
     "DataValidationTool",
     "ToolRegistry",
-    "create_standard_tool_registry"
+    "create_standard_tool_registry",
+    
+    # Memory Management (Section 1.7)
+    "MemoryGuard",
+    "MemorySnapshot",
+    "MemoryStats",
+    "BoundedCache",
+    
+    # Health & Signals (Sections 1.5, 1.8)
+    "HealthCheckSystem",
+    "HealthStatus",
+    "SignalHandler"
 ]
