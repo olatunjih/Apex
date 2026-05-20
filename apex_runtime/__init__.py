@@ -41,8 +41,8 @@ from .strategy import (
 )
 
 # Tool Layer (Section 4)
-from .tools import (
-    ToolCategory, ToolExecutionStatus, ToolInputSchema, ToolOutputSchema,
+from .tools import (  # Tools moved to separate module - imports below
+
     ToolMetadata, ToolExecutionRecord, Tool, BaseTool,
     PriceNormalizationTool, ReturnCalculationTool, VolatilityCalculationTool,
     DataValidationTool, ToolRegistry, create_standard_tool_registry
@@ -143,7 +143,6 @@ __all__ = [
     "ExampleMomentumStrategy",
     
     # Tool Layer
-    "ToolCategory",
     "ToolExecutionStatus",
     "ToolInputSchema",
     "ToolOutputSchema",
