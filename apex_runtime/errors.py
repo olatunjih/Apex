@@ -9,6 +9,7 @@ class ErrorCategory(str, Enum):
     EXTERNAL = "external"
     SYSTEM = "system"
     DATA = "data"
+    CONCURRENCY = "concurrency"
 
 
 class ErrorSeverity(str, Enum):

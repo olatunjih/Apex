@@ -58,7 +58,7 @@ class TestReactiveLayer(unittest.TestCase):
         cog = CognitiveLayer(memory_ttl_days=30)
         cog.upsert_thesis("NVDA", "AI capex cycle", 0.9, 0.8, source_count=5, horizon_days=30, regime_tag="risk_on")
         cog.record_failure("NVDA", "late-cycle valuation compression", "trend", realized_return_bps=-220)
-        layer = ReactiveLayer(cog)
+        layer = ReactiveLayer(cog, RuntimeConfig())
 
         decision = layer.analyze(AnalysisRequest("NVDA", "analyze ticker", 0.03, 0.85, 45))
         self.assertEqual(decision.tier, "ticker")
@@ -66,7 +66,7 @@ class TestReactiveLayer(unittest.TestCase):
         self.assertIn("final", decision.why.confidence_calibration)
 
     def test_position_confirmation(self):
-        layer = ReactiveLayer(CognitiveLayer())
+        layer = ReactiveLayer(CognitiveLayer(), RuntimeConfig())
         approved = layer.position_confirmation("AAPL", proposed_heat=0.12, max_heat=0.20)
         rejected = layer.position_confirmation("AAPL", proposed_heat=0.22, max_heat=0.20)
         self.assertTrue(approved["approved"])
