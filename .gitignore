@@ -13,19 +13,13 @@ env/
 .env.local
 .env.*
 
-# Logs
+# Logs and temp files
 *.log
+*.tmp
 
-# Coverage
-.coverage
-coverage/
-htmlcov/
-
-# IDE
+# Editors
 .vscode/
 .idea/
-*.swp
-*.swo
 
 # OS
 .DS_Store
