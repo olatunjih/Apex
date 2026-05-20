@@ -1,0 +1,7 @@
+# APEX v3 Runtime Dependencies
+psutil>=5.9.0
+
+# Development dependencies
+pytest>=7.0.0
+mypy>=1.0.0
+ruff>=0.1.0
