@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 from threading import RLock
 from typing import Deque, Dict, Iterable, List, Optional
 
@@ -10,16 +11,41 @@ from .config import RuntimeConfig
 from .errors import APEXError, ErrorCategory, ErrorSeverity, validation_error
 
 
+class RuntimePhase(str, Enum):
+    CREATED = "created"
+    PREFLIGHT = "preflight"
+    STORAGE = "storage"
+    INTELLIGENCE_LOADING = "intelligence_loading"
+    STATE_RECONSTRUCTION = "state_reconstruction"
+    EXTERNAL_CONNECTIONS = "external_connections"
+    SERVICES = "services"
+    SHUTDOWN = "shutdown"
+
+
+class AuditEvent(str, Enum):
+    PRE_FLIGHT_COMPLETE = "PRE_FLIGHT_COMPLETE"
+    STORAGE_READY = "STORAGE_READY"
+    INTELLIGENCE_READY = "INTELLIGENCE_READY"
+    STATE_RECONSTRUCTION_READY = "STATE_RECONSTRUCTION_READY"
+    PIL_STARTING = "PIL_STARTING"
+    SESSION_STARTED = "SESSION_STARTED"
+    STARTUP_COMPLETE = "STARTUP_COMPLETE"
+    SHUTDOWN_IMMINENT = "SHUTDOWN_IMMINENT"
+    SHUTDOWN_COMPLETE = "SHUTDOWN_COMPLETE"
+    DLQ_GROWING = "DLQ_GROWING"
+
+
 @dataclass(frozen=True)
 class RuntimeEvent:
     key: str
     payload: dict
     created_at: datetime
+    retries: int = 0
 
 
 @dataclass
 class RuntimeState:
-    phase: str = "created"
+    phase: RuntimePhase = RuntimePhase.CREATED
     ready: bool = False
     degraded_modes: List[str] = field(default_factory=list)
     audit_trail: List[str] = field(default_factory=list)
@@ -32,12 +58,11 @@ class ApexRuntime:
         self._idempotency_cache: "OrderedDict[str, dict]" = OrderedDict()
         self._outbox: Deque[RuntimeEvent] = deque()
         self._dead_letter_queue: Deque[RuntimeEvent] = deque()
-        self._processed_keys: set[str] = set()
         self._lock = RLock()
 
-    def _audit(self, event: str) -> None:
+    def _audit(self, event: AuditEvent) -> None:
         ts = datetime.now(timezone.utc).isoformat()
-        self.state.audit_trail.append(f"{ts} {event}")
+        self.state.audit_trail.append(f"{ts} {event.value}")
 
     def _check_clock(self, measured_drift_ms: int) -> None:
         if measured_drift_ms > self.config.max_clock_drift_ms:
@@ -46,10 +71,7 @@ class ApexRuntime:
                 category=ErrorCategory.SYSTEM,
                 severity=ErrorSeverity.CRITICAL,
                 retryable=False,
-                message=(
-                    f"Clock drift {measured_drift_ms}ms exceeds "
-                    f"limit {self.config.max_clock_drift_ms}ms"
-                ),
+                message=f"Clock drift {measured_drift_ms}ms exceeds limit {self.config.max_clock_drift_ms}ms",
             )
 
     def _validate_snapshot_age(self, snapshot_timestamp: Optional[datetime]) -> None:
@@ -60,29 +82,23 @@ class ApexRuntime:
         if age > timedelta(seconds=self.config.max_startup_snapshot_age_seconds):
             self.state.degraded_modes.append("pil_cold_start")
 
-    def startup(
-        self,
-        measured_drift_ms: int = 0,
-        vendor_ok: bool = True,
-        llm_ok: bool = True,
-        snapshot_timestamp: Optional[datetime] = None,
-    ) -> RuntimeState:
+    def startup(self, measured_drift_ms: int = 0, vendor_ok: bool = True, llm_ok: bool = True, snapshot_timestamp: Optional[datetime] = None) -> RuntimeState:
         with self._lock:
-            self.state.phase = "preflight"
+            self.state.phase = RuntimePhase.PREFLIGHT
             self._check_clock(measured_drift_ms)
-            self._audit("PRE_FLIGHT_COMPLETE")
+            self._audit(AuditEvent.PRE_FLIGHT_COMPLETE)
 
-            self.state.phase = "storage"
-            self._audit("STORAGE_READY")
+            self.state.phase = RuntimePhase.STORAGE
+            self._audit(AuditEvent.STORAGE_READY)
 
-            self.state.phase = "intelligence_loading"
-            self._audit("INTELLIGENCE_READY")
+            self.state.phase = RuntimePhase.INTELLIGENCE_LOADING
+            self._audit(AuditEvent.INTELLIGENCE_READY)
 
-            self.state.phase = "state_reconstruction"
+            self.state.phase = RuntimePhase.STATE_RECONSTRUCTION
             self._validate_snapshot_age(snapshot_timestamp)
-            self._audit("STATE_RECONSTRUCTION_READY")
+            self._audit(AuditEvent.STATE_RECONSTRUCTION_READY)
 
-            self.state.phase = "external_connections"
+            self.state.phase = RuntimePhase.EXTERNAL_CONNECTIONS
             if not vendor_ok and self.config.startup_vendor_optional:
                 self.state.degraded_modes.append("analysis_mode_data_warning")
             elif not vendor_ok:
@@ -93,16 +109,19 @@ class ApexRuntime:
             elif not llm_ok:
                 raise APEXError("LLM_UNAVAILABLE", ErrorCategory.EXTERNAL, ErrorSeverity.HIGH, True, "LLM unavailable")
 
-            self.state.phase = "services"
+            self.state.phase = RuntimePhase.SERVICES
+            self._audit(AuditEvent.PIL_STARTING)
             self.state.ready = True
-            self._audit("STARTUP_COMPLETE")
+            self._audit(AuditEvent.SESSION_STARTED)
+            self._audit(AuditEvent.STARTUP_COMPLETE)
             return self.state
 
     def shutdown(self) -> RuntimeState:
         with self._lock:
-            self.state.phase = "shutdown"
+            self.state.phase = RuntimePhase.SHUTDOWN
+            self._audit(AuditEvent.SHUTDOWN_IMMINENT)
             self.state.ready = False
-            self._audit("SHUTDOWN_COMPLETE")
+            self._audit(AuditEvent.SHUTDOWN_COMPLETE)
             return self.state
 
     def process_idempotent(self, key: str, payload: dict) -> dict:
@@ -116,7 +135,6 @@ class ApexRuntime:
 
             result = {"accepted": True, "payload": payload}
             self._idempotency_cache[key] = result
-            self._processed_keys.add(key)
             self._outbox.append(RuntimeEvent(key=key, payload=result, created_at=datetime.now(timezone.utc)))
             self._prune_cache_if_needed()
             return result
@@ -136,11 +154,15 @@ class ApexRuntime:
             while pending:
                 event = pending.popleft()
                 if event.key in failures:
-                    self._dead_letter_queue.append(event)
+                    if event.retries + 1 >= self.config.outbox_retry_limit:
+                        self._dead_letter_queue.append(RuntimeEvent(event.key, event.payload, event.created_at, retries=event.retries + 1))
+                    else:
+                        self._outbox.append(RuntimeEvent(event.key, event.payload, event.created_at, retries=event.retries + 1))
                     continue
                 delivered += 1
+
             if len(self._dead_letter_queue) > self.config.dlq_alert_threshold:
-                self._audit("DLQ_GROWING")
+                self._audit(AuditEvent.DLQ_GROWING)
             return delivered
 
     @property

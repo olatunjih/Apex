@@ -6,6 +6,8 @@ from typing import Dict, Literal
 from .cognitive import CognitiveLayer
 from .config import RuntimeConfig
 from .errors import validation_error
+from .why_engine import WhyContext, WhyEngine
+from .reflection import ReflectionLayer, ReflectionRecord
 
 IntentTier = Literal["portfolio", "ticker", "education"]
 
@@ -53,6 +55,8 @@ class ReactiveLayer:
         self.cognitive = cognitive
         self.config = config
         self.router = IntentRouter()
+        self.why_engine = WhyEngine(cognitive)
+        self.reflection = ReflectionLayer()
 
     def analyze(self, request: AnalysisRequest) -> ReactiveDecision:
         self._validate_request(request)
@@ -71,22 +75,30 @@ class ReactiveLayer:
         action = self.config.blocked_action if blocked else self.config.actionable_research_action
         reason = "insufficient calibrated confidence" if blocked else "thesis supported by available evidence"
 
-        regime = memory.regime_tag if memory else "unknown"
+        explanation = self.why_engine.explain(
+            WhyContext(
+                ticker=request.ticker,
+                base_confidence=request.base_confidence,
+                adjusted_confidence=adjusted,
+                intent=request.intent,
+                risk_budget=request.user_risk_budget,
+            )
+        )
         why = WhyLayer(
-            market_structure=f"regime={regime}",
-            strategy_context=(memory.thesis if memory else "No prior thesis; using current request context."),
-            evidence_quality=(f"{memory.evidence_quality:.2f}" if memory else "unknown"),
+            market_structure=explanation.market_structure,
+            strategy_context=explanation.strategy_context,
+            evidence_quality=explanation.evidence_quality,
             risk_constraints=(
-                f"risk_budget={request.user_risk_budget:.4f}; "
-                f"min_risk_budget={self.config.min_risk_budget:.4f}; blocked={blocked}"
+                f"{explanation.risk_constraints}; min_risk_budget={self.config.min_risk_budget:.4f}; blocked={blocked}"
             ),
             confidence_calibration=(
-                f"base={request.base_confidence:.2f} calibrated={calibrated:.2f} "
-                f"horizon_penalty={horizon_penalty:.2f} final={adjusted:.2f} "
+                f"{explanation.confidence_calibration}; horizon_penalty={horizon_penalty:.2f}; "
                 f"threshold={self.config.min_actionable_confidence:.2f}"
             ),
         )
-        return ReactiveDecision(tier=tier, action=action, confidence=adjusted, blocked=blocked, reason=reason, why=why)
+        decision = ReactiveDecision(tier=tier, action=action, confidence=adjusted, blocked=blocked, reason=reason, why=why)
+        self.reflection.reflect(request.ticker, decision)
+        return decision
 
     def position_confirmation(self, ticker: str, proposed_heat: float, max_heat: float) -> Dict[str, str | bool | float]:
         if not ticker:
