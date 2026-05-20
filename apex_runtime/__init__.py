@@ -10,7 +10,7 @@ from .policy import NumericalPolicy, DEFAULT_NUMERICAL_POLICY, serialize_decimal
 from .why_engine import WhyContext, WhyEngine, WhyExplanation
 from .reflection import ReflectionLayer, ReflectionRecord
 
-# New core modules
+# Core domain models
 from .core_models import (
     EpistemicState, ConfidenceLevel, KnowledgeBoundary, ThesisChange,
     TickerIntelligenceFile, Guardrails, GuardrailResult, AbstainModeState
@@ -32,6 +32,22 @@ from .analytical_debt import (
     AnalyticalDebtDashboard, ThesisLifecycleManager
 )
 
+# Strategy Layer (Section 3)
+from .strategy import (
+    StrategyType, SignalStrength, StrategySignal, StrategyMetadata,
+    StrategyPlugin, RegisteredStrategy, StrategyRegistry, StrategySelector,
+    AggregatedSignal, StrategyAggregator, StrategyPerformanceMetrics,
+    StrategyPerformanceTracker, ExampleMomentumStrategy
+)
+
+# Tool Layer (Section 4)
+from .tools import (
+    ToolCategory, ToolExecutionStatus, ToolInputSchema, ToolOutputSchema,
+    ToolMetadata, ToolExecutionRecord, Tool, BaseTool,
+    PriceNormalizationTool, ReturnCalculationTool, VolatilityCalculationTool,
+    DataValidationTool, ToolRegistry, create_standard_tool_registry
+)
+
 __all__ = [
     # Original exports
     "RuntimeConfig",
@@ -48,21 +64,22 @@ __all__ = [
     "CognitiveState",
     "MemoryRecord",
     "FailureRecord",
+    "ReactiveLayer",
+    "ReactiveDecision",
     "AnalysisRequest",
     "IntentRouter",
-    "ReactiveDecision",
-    "ReactiveLayer",
     "WhyLayer",
-    "NumericalPolicy",
-    "DEFAULT_NUMERICAL_POLICY",
-    "serialize_decimal",
     "WhyContext",
-    "WhyEngine",
     "WhyExplanation",
     "ReflectionLayer",
     "ReflectionRecord",
     
-    # Core models
+    # Policy & Config
+    "NumericalPolicy",
+    "DEFAULT_NUMERICAL_POLICY",
+    "serialize_decimal",
+    
+    # Core Models
     "EpistemicState",
     "ConfidenceLevel",
     "KnowledgeBoundary",
@@ -79,7 +96,7 @@ __all__ = [
     "LearningEngine",
     "KnowledgeApplicationEngine",
     
-    # Second-Order Analysis
+    # Second Order Analysis
     "EffectType",
     "SecondOrderEffect",
     "CausalChain",
@@ -103,4 +120,35 @@ __all__ = [
     "ThesisLifecycleEvent",
     "AnalyticalDebtDashboard",
     "ThesisLifecycleManager",
+    
+    # Strategy Layer
+    "StrategyType",
+    "SignalStrength",
+    "StrategySignal",
+    "StrategyMetadata",
+    "StrategyPlugin",
+    "RegisteredStrategy",
+    "StrategyRegistry",
+    "StrategySelector",
+    "AggregatedSignal",
+    "StrategyAggregator",
+    "StrategyPerformanceMetrics",
+    "StrategyPerformanceTracker",
+    "ExampleMomentumStrategy",
+    
+    # Tool Layer
+    "ToolCategory",
+    "ToolExecutionStatus",
+    "ToolInputSchema",
+    "ToolOutputSchema",
+    "ToolMetadata",
+    "ToolExecutionRecord",
+    "Tool",
+    "BaseTool",
+    "PriceNormalizationTool",
+    "ReturnCalculationTool",
+    "VolatilityCalculationTool",
+    "DataValidationTool",
+    "ToolRegistry",
+    "create_standard_tool_registry"
 ]
