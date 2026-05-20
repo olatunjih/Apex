@@ -82,6 +82,7 @@ class ReactiveLayer:
                 adjusted_confidence=adjusted,
                 intent=request.intent,
                 risk_budget=request.user_risk_budget,
+                target_horizon_days=request.target_horizon_days,
             )
         )
         why = WhyLayer(

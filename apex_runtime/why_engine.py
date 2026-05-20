@@ -12,6 +12,7 @@ class WhyContext:
     adjusted_confidence: float
     intent: str
     risk_budget: float
+    target_horizon_days: int
 
 
 @dataclass(frozen=True)
@@ -33,15 +34,26 @@ class WhyEngine:
         memory = self.cognitive.state.strategic_memory.get(ctx.ticker)
         regime = memory.regime_tag if memory else "unknown"
         strategy = memory.thesis if memory else "No stored thesis; response derived from request context."
-        evidence = f"{memory.evidence_quality:.2f}" if memory else "unknown"
+        evidence = memory.evidence_quality if memory else 0.0
+        source_count = memory.source_count if memory else 0
+
+        failure_rate = self.cognitive.get_failure_rate(ctx.ticker)
+        loss_adjusted = ctx.base_confidence - ctx.adjusted_confidence
 
         return WhyExplanation(
-            market_structure=f"regime={regime}; intent={ctx.intent}",
-            strategy_context=strategy,
-            evidence_quality=f"evidence_quality={evidence}",
+            market_structure=(
+                f"regime={regime}; intent={ctx.intent}; horizon_days={ctx.target_horizon_days}"
+            ),
+            strategy_context=(
+                f"thesis={strategy}; prior_sources={source_count}; "
+                f"memory_present={memory is not None}"
+            ),
+            evidence_quality=(
+                f"evidence_quality={evidence:.2f}; failure_rate={failure_rate:.2f}"
+            ),
             risk_constraints=f"risk_budget={ctx.risk_budget:.4f}",
             confidence_calibration=(
                 f"base={ctx.base_confidence:.2f} adjusted={ctx.adjusted_confidence:.2f} "
-                f"delta={(ctx.adjusted_confidence - ctx.base_confidence):.2f}"
+                f"loss_adjustment={loss_adjusted:.2f}"
             ),
         )

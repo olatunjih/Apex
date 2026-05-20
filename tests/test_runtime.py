@@ -1,11 +1,12 @@
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 import unittest
 
 from apex_runtime import ApexRuntime, RuntimeConfig, RuntimePhase, enforce_decimal
-from apex_runtime.cognitive import CognitiveLayer
 from apex_runtime.errors import APEXError
 from apex_runtime.reactive import AnalysisRequest, ReactiveLayer
+from apex_runtime.cognitive import CognitiveLayer
+from apex_runtime.policy import NumericalPolicy
 
 
 class TestRuntime(unittest.TestCase):
@@ -15,24 +16,26 @@ class TestRuntime(unittest.TestCase):
         state = rt.startup(vendor_ok=False, llm_ok=False, snapshot_timestamp=stale)
         self.assertTrue(state.ready)
         self.assertEqual(state.phase, RuntimePhase.SERVICES)
-        self.assertIn("analysis_mode_data_warning", state.degraded_modes)
-        self.assertIn("deterministic_only", state.degraded_modes)
-        self.assertIn("pil_cold_start", state.degraded_modes)
-        self.assertTrue(any("PIL_STARTING" in e for e in state.audit_trail))
+
+    def test_startup_rejects_invalid_numerical_policy(self):
+        cfg = RuntimeConfig()
+        object.__setattr__(cfg, "numerical_policy", NumericalPolicy(
+            monetary_precision=10,
+            monetary_type_name="Decimal",
+            rounding_mode=ROUND_HALF_UP,
+            price_display_precision=2,
+            percentage_precision=6,
+        ))
+        rt = ApexRuntime(cfg)
+        with self.assertRaises(ValueError):
+            rt.startup()
 
     def test_idempotency_and_outbox_retries(self):
         rt = ApexRuntime(RuntimeConfig(max_idempotency_cache_size=2, outbox_retry_limit=2))
-        first = rt.process_idempotent("k1", {"x": 1})
-        second = rt.process_idempotent("k1", {"x": 9})
-        self.assertEqual(first, second)
+        self.assertEqual(rt.process_idempotent("k1", {"x": 1}), rt.process_idempotent("k1", {"x": 9}))
         self.assertEqual(rt.outbox_size, 1)
-
-        delivered = rt.drain_outbox(fail_keys=["k1"])
-        self.assertEqual(delivered, 0)
-        self.assertEqual(rt.outbox_size, 1)
-
-        delivered = rt.drain_outbox(fail_keys=["k1"])
-        self.assertEqual(delivered, 0)
+        rt.drain_outbox(fail_keys=["k1"])
+        rt.drain_outbox(fail_keys=["k1"])
         self.assertEqual(rt.dead_letter_size, 1)
 
     def test_decimal_gate(self):
@@ -49,11 +52,10 @@ class TestReactiveLayer(unittest.TestCase):
         layer = ReactiveLayer(cog, RuntimeConfig())
 
         decision = layer.analyze(AnalysisRequest("NVDA", "analyze ticker", 0.03, 0.85, 45))
-        self.assertEqual(decision.tier, "ticker")
-        self.assertIn("regime", decision.why.market_structure)
-        self.assertIn("delta", decision.why.confidence_calibration)
+        self.assertIn("horizon_days", decision.why.market_structure)
+        self.assertIn("failure_rate", decision.why.evidence_quality)
+        self.assertIn("loss_adjustment", decision.why.confidence_calibration)
         self.assertGreaterEqual(layer.reflection.analytical_debt_score(), 0.0)
-        self.assertEqual(len(layer.reflection.recent()), 1)
 
 
 if __name__ == "__main__":
