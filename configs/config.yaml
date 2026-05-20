@@ -1,0 +1,39 @@
+# APEX Runtime Configuration
+
+guardrails:
+  harm_phrases:
+    - "kill myself"
+    - "hurt myself"
+    - "end my life"
+    - "commit suicide"
+  
+  position_limits:
+    AAPL: 50000
+    MSFT: 50000
+    SPY: 100000
+    QQQ: 100000
+    "*": 25000  # default limit
+  
+  price_bounds:
+    min_price: 0.01
+    max_price: 100000.0
+    max_change_pct: 50.0
+
+database:
+  host: localhost
+  port: 5432
+  name: apex_runtime
+  user: apex
+  pool_size: 10
+
+redis:
+  host: localhost
+  port: 6379
+  db: 0
+  ttl_seconds: 86400
+
+observability:
+  log_level: INFO
+  metrics_enabled: true
+  tracing_enabled: true
+  metrics_port: 9090
