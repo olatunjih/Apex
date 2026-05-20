@@ -6,6 +6,8 @@ from .reactive import AnalysisRequest, IntentRouter, ReactiveDecision, ReactiveL
 from .errors import APEXError, ErrorCategory, ErrorSeverity
 from .numerics import MonetaryValue, enforce_decimal
 from .runtime import ApexRuntime, RuntimeEvent, RuntimePhase, RuntimeState
+from .why_engine import WhyContext, WhyEngine, WhyExplanation
+from .reflection import ReflectionLayer, ReflectionRecord
 
 __all__ = [
     "RuntimeConfig",
@@ -27,4 +29,9 @@ __all__ = [
     "ReactiveDecision",
     "ReactiveLayer",
     "WhyLayer",
+    "WhyContext",
+    "WhyEngine",
+    "WhyExplanation",
+    "ReflectionLayer",
+    "ReflectionRecord",
 ]

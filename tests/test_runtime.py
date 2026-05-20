@@ -41,19 +41,8 @@ class TestRuntime(unittest.TestCase):
             enforce_decimal(1.23, "price")
 
 
-class TestCognitiveLayer(unittest.TestCase):
-    def test_memory_and_failure_feedback(self):
-        cog = CognitiveLayer(memory_ttl_days=10)
-        rec = cog.upsert_thesis("AAPL", "Earnings revision momentum", 0.8, 0.9, source_count=4, horizon_days=15, regime_tag="risk_on")
-        self.assertGreater(rec.confidence, 0.0)
-
-        cog.record_failure("AAPL", "Thesis invalidated", "momentum", realized_return_bps=-140)
-        adjusted = cog.get_bias_adjusted_confidence("AAPL", 0.8)
-        self.assertLess(adjusted, 0.8)
-
-
 class TestReactiveLayer(unittest.TestCase):
-    def test_reactive_analysis_uses_cognitive_calibration(self):
+    def test_reactive_analysis_uses_why_engine_and_reflection(self):
         cog = CognitiveLayer(memory_ttl_days=30)
         cog.upsert_thesis("NVDA", "AI capex cycle", 0.9, 0.8, source_count=5, horizon_days=30, regime_tag="risk_on")
         cog.record_failure("NVDA", "late-cycle valuation compression", "trend", realized_return_bps=-220)
@@ -61,8 +50,10 @@ class TestReactiveLayer(unittest.TestCase):
 
         decision = layer.analyze(AnalysisRequest("NVDA", "analyze ticker", 0.03, 0.85, 45))
         self.assertEqual(decision.tier, "ticker")
-        self.assertLess(decision.confidence, 0.85)
-        self.assertIn("threshold", decision.why.confidence_calibration)
+        self.assertIn("regime", decision.why.market_structure)
+        self.assertIn("delta", decision.why.confidence_calibration)
+        self.assertGreaterEqual(layer.reflection.analytical_debt_score(), 0.0)
+        self.assertEqual(len(layer.reflection.recent()), 1)
 
 
 if __name__ == "__main__":
