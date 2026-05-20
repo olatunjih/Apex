@@ -1,26 +1,75 @@
-# Apex
+# APEX Runtime
 
-APEX runtime + intelligence substrate foundation aligned to the APEX v3 instruction set.
+Autonomous Production-Ready EXecutive (APEX) - A hardened runtime for autonomous trading agents.
 
-## Implemented now
+## Project Structure
 
-- Runtime lifecycle with phased startup, preflight clock drift check, degraded startup paths, snapshot staleness handling, and shutdown auditing.
-- Exactly-once style idempotent processing primitives with bounded LRU cache and outbox/DLQ queues.
-- Typed error taxonomy and validation helpers.
-- Monetary Decimal gate enforcement for G11 numerical correctness.
-- Cognitive layer with:
-  - thesis memory persistence per ticker
-  - evidence/source-aware confidence calibration
-  - failure memory with loss-aware confidence penalties
-  - TTL-based stale memory eviction
-- Reactive layer with:
-  - intent routing (portfolio / ticker / education)
-  - on-demand analysis that applies cognitive calibration
-  - structured “why engine” fields for explainability
-  - position confirmation risk-cap check
-
-## Run tests
-
-```bash
-python -m unittest discover -s tests -v
 ```
+/workspace
+├── src/                    # Main source code
+│   └── apex_runtime/       # Core runtime package
+│       ├── agents/         # Agent implementations
+│       ├── tools/          # Tool definitions and executors
+│       ├── ui/             # User interface components
+│       ├── tests/          # Unit tests
+│       └── *.py            # Core modules
+├── configs/                # Configuration files
+│   └── config.yaml         # Runtime configuration
+├── migrations/             # Database migration scripts
+│   └── 001_initial_schema.sql
+├── scripts/                # Utility scripts
+│   ├── run_server.py       # Start the runtime server
+│   └── run_tests.py        # Run test suite
+└── docs/                   # Documentation
+    ├── APEX_v3_INSTRUCTION_SET.md
+    ├── APEX_BUILD_PLAN.md
+    ├── BUILD_PROGRESS.md
+    └── README.md
+```
+
+## Quick Start
+
+### Prerequisites
+- Python 3.10+
+- PostgreSQL 14+
+- Redis 6+
+
+### Installation
+```bash
+pip install -r requirements.txt
+```
+
+### Database Setup
+```bash
+psql -U apex -d apex_runtime -f migrations/001_initial_schema.sql
+```
+
+### Run Server
+```bash
+python scripts/run_server.py
+```
+
+### Run Tests
+```bash
+python scripts/run_tests.py
+```
+
+## Key Features
+
+- **Guardrails**: 11 non-bypassable safety constraints (G1-G11)
+- **Idempotency**: PostgreSQL-backed action deduplication
+- **Observability**: Structured logging, metrics, and tracing
+- **Outbox Pattern**: Reliable event publishing
+- **Proactive Intelligence**: Regime detection and risk monitoring
+
+## Configuration
+
+Edit `configs/config.yaml` to customize:
+- Guardrail thresholds
+- Database connection settings
+- Redis cache configuration
+- Observability options
+
+## License
+
+Proprietary - All rights reserved
