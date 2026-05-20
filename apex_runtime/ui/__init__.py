@@ -41,7 +41,6 @@ from apex_runtime.ui.war_room import (
     # Canvas Engine
     CanvasPayload,
     CanvasElement,
-    CanvasEngine,
     # Thought Process Inspector
     StepDisagreement,
     ThoughtProcessInspector,
@@ -49,6 +48,25 @@ from apex_runtime.ui.war_room import (
     LayoutMode,
     WarRoomLayout,
     WarRoomLayoutManager,
+)
+
+from apex_runtime.ui.canvas_engine import (
+    CanvasEngine as CanvasEngineNew,
+    CanvasRenderer,
+    BaseCanvasRenderer,
+    CanvasConfig,
+    RenderRequest,
+    RenderResponse,
+    CandlestickRenderer,
+    VolumeProfileRenderer,
+    OptionsSurfaceRenderer,
+    TradePlanCardRenderer,
+    WhyEngineCardRenderer,
+    PortfolioHeatmapRenderer,
+    AnalysisTrajectoryRenderer,
+    FailurePatternMapRenderer,
+    ErrorPayloadRenderer,
+    render_canvas,
 )
 
 from apex_runtime.ui.cli import (
@@ -85,10 +103,26 @@ __all__ = [
     "BehavioralBiasEvent",
     "ConfigDriftItem",
     "FailurePatternPoint",
-    # Canvas Engine
+    # Canvas Engine (war_room)
     "CanvasPayload",
     "CanvasElement",
-    "CanvasEngine",
+    # Canvas Engine (canvas_engine)
+    "CanvasEngineNew",
+    "CanvasRenderer",
+    "BaseCanvasRenderer",
+    "CanvasConfig",
+    "RenderRequest",
+    "RenderResponse",
+    "CandlestickRenderer",
+    "VolumeProfileRenderer",
+    "OptionsSurfaceRenderer",
+    "TradePlanCardRenderer",
+    "WhyEngineCardRenderer",
+    "PortfolioHeatmapRenderer",
+    "AnalysisTrajectoryRenderer",
+    "FailurePatternMapRenderer",
+    "ErrorPayloadRenderer",
+    "render_canvas",
     # Thought Process Inspector
     "StepDisagreement",
     "ThoughtProcessInspector",
