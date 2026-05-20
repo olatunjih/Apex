@@ -4,9 +4,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from statistics import mean
 from threading import RLock
-from typing import Dict, List
-
-from .errors import validation_error
+from typing import Dict, List, Optional, Any
 
 
 @dataclass(frozen=True)
@@ -28,23 +26,34 @@ class FailureRecord:
     strategy: str
     realized_return_bps: float
     created_at: datetime
+    failure_id: str = ""
+    signal_id: Optional[str] = None
+    direction: Optional[str] = None
+    signal_context: Optional[Dict[str, Any]] = None
+    outcome: Optional[Dict[str, Any]] = None
+    root_cause: Optional[Dict[str, Any]] = None
+    fingerprint: Optional[Dict[str, Any]] = None
 
 
 @dataclass
 class CognitiveState:
     strategic_memory: Dict[str, MemoryRecord] = field(default_factory=dict)
     failure_memory: List[FailureRecord] = field(default_factory=list)
+    failure_patterns: Dict[str, Any] = field(default_factory=dict)
+    lessons_learned: List[Dict[str, Any]] = field(default_factory=list)
 
 
 class CognitiveLayer:
     """Cross-session intelligence substrate for confidence calibration and memory."""
 
-    def __init__(self, memory_ttl_days: int = 30) -> None:
+    def __init__(self, memory_ttl_days: int = 30, persistence_enabled: bool = False) -> None:
         if memory_ttl_days <= 0:
             raise validation_error("MEMORY_TTL_INVALID", "memory_ttl_days must be > 0")
         self.memory_ttl = timedelta(days=memory_ttl_days)
+        self.persistence_enabled = persistence_enabled
         self.state = CognitiveState()
         self._lock = RLock()
+        self._failure_counter = 0
 
     def upsert_thesis(
         self,
@@ -81,15 +90,29 @@ class CognitiveLayer:
                 raise validation_error("MEMORY_NOT_FOUND", f"no memory for ticker {ticker}")
             self.state.strategic_memory[ticker] = replace(rec, created_at=created_at)
 
-    def record_failure(self, ticker: str, reason: str, strategy: str, realized_return_bps: float) -> FailureRecord:
+    def record_failure(self, ticker: str, reason: str, strategy: str, realized_return_bps: float,
+                      signal_id: Optional[str] = None, direction: Optional[str] = None,
+                      signal_context: Optional[Dict[str, Any]] = None,
+                      outcome: Optional[Dict[str, Any]] = None,
+                      root_cause: Optional[Dict[str, Any]] = None,
+                      fingerprint: Optional[Dict[str, Any]] = None) -> FailureRecord:
         if not ticker:
-            raise validation_error("TICKER_REQUIRED", "ticker is required")
+            raise ValueError("ticker is required")
+        self._failure_counter += 1
+        failure_id = f"FAIL-{self._failure_counter:06d}"
         rec = FailureRecord(
             ticker=ticker,
             reason=reason,
             strategy=strategy,
             realized_return_bps=realized_return_bps,
             created_at=datetime.now(timezone.utc),
+            failure_id=failure_id,
+            signal_id=signal_id,
+            direction=direction,
+            signal_context=signal_context,
+            outcome=outcome,
+            root_cause=root_cause,
+            fingerprint=fingerprint,
         )
         with self._lock:
             self.state.failure_memory.append(rec)

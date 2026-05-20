@@ -65,7 +65,19 @@ class MemoryGuard:
         self._lock = RLock()
         self._idempotency_cache = BoundedCache(10000)
         self._data_registry_cache = BoundedCache(5000)
+        self._baseline_snapshot = None
         tracemalloc.start()
+        
+    def take_snapshot(self) -> MemorySnapshot:
+        """Take a memory snapshot for baseline comparison"""
+        snap = self.get_memory_usage()
+        if self._baseline_snapshot is None:
+            self._baseline_snapshot = snap
+        with self._lock:
+            self.snapshot_history.append(snap)
+            while len(self.snapshot_history) > 60:
+                self.snapshot_history.pop(0)
+        return snap
         
     def get_memory_usage(self) -> MemorySnapshot:
         import psutil
@@ -97,10 +109,8 @@ class MemoryGuard:
         return None
     
     def record_snapshot(self):
-        with self._lock:
-            self.snapshot_history.append(self.get_memory_usage())
-            while len(self.snapshot_history) > 60:
-                self.snapshot_history.pop(0)
+        """Record a memory snapshot (alias for take_snapshot)"""
+        return self.take_snapshot()
     
     def get_status(self) -> Dict[str, Any]:
         snap = self.get_memory_usage()
