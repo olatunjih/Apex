@@ -333,8 +333,8 @@ class StrategyAggregator:
         neutral_signals = [s for s in signals if s.direction == "neutral"]
         
         # Determine aggregated direction
-        long_weight = sum(float(s.confidence) * len(long_signals) for s in long_signals) if long_signals else 0
-        short_weight = sum(float(s.confidence) * len(short_signals) for s in short_signals) if short_signals else 0
+        long_weight = sum(float(s.confidence) for s in long_signals) if long_signals else 0
+        short_weight = sum(float(s.confidence) for s in short_signals) if short_signals else 0
         
         if long_weight > short_weight * 1.2:  # 20% threshold for consensus
             agg_direction = "long"
