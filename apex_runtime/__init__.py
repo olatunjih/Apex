@@ -41,11 +41,11 @@ from .strategy import (
 )
 
 # Tool Layer (Section 4)
-from .tools import (  # Tools moved to separate module - imports below
-
-    ToolMetadata, ToolExecutionRecord, Tool, BaseTool,
-    PriceNormalizationTool, ReturnCalculationTool, VolatilityCalculationTool,
-    DataValidationTool, ToolRegistry, create_standard_tool_registry
+from .tools import (
+    ToolMetadata, ToolExecutionRecord, Tool, BaseTool, ToolExecutionStatus,
+    ToolInputSchema, ToolOutputSchema, PriceNormalizationTool, ReturnCalculationTool,
+    VolatilityCalculationTool, DataValidationTool, ToolRegistry, create_standard_tool_registry,
+    DataRegistry, ToolResult, FetchMarketDataTool, ComputeIndicatorsTool, GenerateSignalsTool
 )
 
 # Memory Management (Section 1.7)

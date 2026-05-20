@@ -42,6 +42,17 @@ def validate_numerical_policy(policy: NumericalPolicy) -> None:
 class MonetaryValue:
     amount: Decimal
 
+    def __post_init__(self):
+        if not isinstance(self.amount, Decimal):
+            raise APEXError(
+                code="NUMERICAL_TYPE_VIOLATION",
+                category=ErrorCategory.VALIDATION,
+                severity=ErrorSeverity.HIGH,
+                retryable=False,
+                message=f"MonetaryValue.amount must be Decimal, got {type(self.amount).__name__}",
+                user_visible=True,
+            )
+
     def quantize_price(self) -> Decimal:
         return self.amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
