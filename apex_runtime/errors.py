@@ -31,3 +31,14 @@ class APEXError(Exception):
 
     def __str__(self) -> str:
         return f"{self.code}: {self.message}"
+
+
+def validation_error(code: str, message: str) -> APEXError:
+    return APEXError(
+        code=code,
+        category=ErrorCategory.VALIDATION,
+        severity=ErrorSeverity.HIGH,
+        retryable=False,
+        message=message,
+        user_visible=True,
+    )
