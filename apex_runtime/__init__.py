@@ -3,10 +3,10 @@
 from .cognitive import CognitiveLayer, CognitiveState, FailureRecord, MemoryRecord
 from .config import RuntimeConfig, validate_runtime_config
 from .reactive import AnalysisRequest, IntentRouter, ReactiveDecision, ReactiveLayer, WhyLayer
-from .errors import APEXError, ErrorCategory, ErrorSeverity
-from .numerics import MonetaryValue, enforce_decimal
+from .errors import APEXError, ErrorCategory, ErrorSeverity, validation_error
+from .numerics import MonetaryValue, enforce_decimal, serialize_decimal, NumericalPolicy, DEFAULT_NUMERICAL_POLICY, validate_numerical_policy
 from .runtime import ApexRuntime, RuntimeEvent, RuntimePhase, RuntimeState
-from .policy import NumericalPolicy, DEFAULT_NUMERICAL_POLICY, serialize_decimal
+from .policy import NumericalPolicy as PolicyNumericalPolicy, DEFAULT_NUMERICAL_POLICY as PolicyDefaultNumericalPolicy
 from .why_engine import WhyContext, WhyEngine, WhyExplanation
 from .reflection import ReflectionLayer, ReflectionRecord
 
@@ -67,8 +67,13 @@ __all__ = [
     "APEXError",
     "ErrorCategory",
     "ErrorSeverity",
+    "validation_error",
     "MonetaryValue",
     "enforce_decimal",
+    "serialize_decimal",
+    "NumericalPolicy",
+    "DEFAULT_NUMERICAL_POLICY",
+    "validate_numerical_policy",
     "ApexRuntime",
     "RuntimeEvent",
     "RuntimePhase",
@@ -86,11 +91,6 @@ __all__ = [
     "WhyExplanation",
     "ReflectionLayer",
     "ReflectionRecord",
-    
-    # Policy & Config
-    "NumericalPolicy",
-    "DEFAULT_NUMERICAL_POLICY",
-    "serialize_decimal",
     
     # Core Models
     "EpistemicState",
@@ -163,19 +163,28 @@ __all__ = [
     "DataValidationTool",
     "ToolRegistry",
     "create_standard_tool_registry",
+    "DataRegistry",
+    "ToolResult",
+    "FetchMarketDataTool",
+    "ComputeIndicatorsTool",
+    "GenerateSignalsTool",
     
     # Memory Management (Section 1.7)
     "MemoryGuard",
     "MemorySnapshot",
     "MemoryAlert",
     "BoundedCache",
+    "DEFAULT_MEMORY_GUARD",
     
     # Health & Signals (Sections 1.5, 1.8)
     "HealthChecker",
     "HealthCheckResult",
     "HealthResponse",
+    "start_health_server",
+    "DEFAULT_HEALTH_CHECKER",
     "SignalHandler",
     "SignalHandlerContext",
+    "DEFAULT_SIGNAL_HANDLER",
     
     # Observability (Section 32)
     "StructuredLogger",
@@ -183,8 +192,7 @@ __all__ = [
     "MetricsRegistry",
     "Tracer",
     "CostTracker",
-    
-    # Additional exports
-    "validate_runtime_config",
-    "ApexRuntime",
+    "DEFAULT_METRICS",
+    "DEFAULT_TRACER",
+    "DEFAULT_COST_TRACKER",
 ]
