@@ -1,1 +1,36 @@
-Nothing needs to be added to .gitignore since only a Python source file (`apex_gap_analysis.py`) was added, which is a source code file that should be tracked in version control. No build artifacts, dependencies, or temporary files were included in the changes.
+```
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Coverage reports
+.coverage
+htmlcov/
+coverage/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+# OS
+.DS_Store
+Thumbs.db
+```
