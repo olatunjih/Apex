@@ -1,330 +1,112 @@
 # APEX v3 Build Progress Report
 
-**Generated:** May 2026  
-**Spec:** APEX v3 Instruction Set (91 sections)  
+**Updated:** June 1, 2026
+**Spec:** APEX v3 Unified Architecture Specification (91 sections, Appendices A-K)
 **Runtime Version:** 3.0.0-alpha
 
 ---
 
 ## Executive Summary
 
-The APEX v3 runtime has been systematically built following a phased implementation plan. This report documents completed modules, validates functionality through integration tests, and identifies remaining gaps against the full specification.
+The repository contains meaningful APEX v3 implementation work, but the previous progress report overstated readiness by treating schemas and scaffolds as complete features. This report separates **stub**, **partial**, and **implemented-with-tests** status so sprint planning can focus on production-critical gaps.
 
-### Current Status
+| Metric | Current Reality |
+|---|---:|
+| Python files under `src/` and `tests/` | 44 |
+| Python LOC under `src/` and `tests/` | ~15,766 |
+| Automated tests in current suite | 68 passing |
+| Spec sections touched | ~45-50 / 91 |
+| Production-ready coherent system | ~15-20% |
+| Estimated coverage depth | Low; concentrated in runtime, data registry, and financial risk |
 
-| Metric | Value |
-|--------|-------|
-| **Total Python Files** | 20 |
-| **Total Lines of Code** | ~4,647 |
-| **Modules Validated** | 14/14 (100%) |
-| **Integration Tests** | 4/4 PASSED |
-| **Spec Sections Implemented** | ~35/91 (38%) |
-
----
-
-## Phase 1: Foundation (Tier 0) — COMPLETE ✅
-
-### 1.1 Decimal/Numerical Policy Enforcement — ✅ Built
-**Files:** `numerics.py`, `policy.py`, `config.py`  
-**Spec:** §1.1, Appendix A, Appendix G
-
-- `MonetaryValue(amount: Decimal)` with `quantize_price()` using `ROUND_HALF_UP`
-- `enforce_decimal()` raises `APEXError(code="NUMERICAL_TYPE_VIOLATION")` on non-Decimal input
-- `NumericalPolicy` frozen dataclass with `monetary_precision=28`
-- `validate_numerical_policy()` enforces exact values
-- `serialize_decimal()` outputs full-precision string for JSON transit
-- `getcontext().prec = 28` set at module import
-- Wired into `RuntimeConfig` as `.numerical_policy` attribute
-
-### 1.2 Exactly-Once Processing — ✅ Built
-**Files:** `runtime.py`  
-**Spec:** §1.2
-
-- `process_idempotent(key, payload)` with bounded `OrderedDict` cache
-- LRU eviction via `_prune_cache_if_needed()`
-- Outbox (`_outbox: deque[RuntimeEvent]`) appended atomically
-- `drain_outbox(fail_keys)` with retry logic and DLQ
-- Thread-safe via `RLock`
-- `RuntimeEvent` frozen dataclass
-
-### 1.3 Clock Authority — 🟡 Partial
-**Files:** `runtime.py`  
-**Spec:** §1.3
-
-**Built:**
-- `_check_clock(measured_drift_ms)` raises on drift > threshold
-- `max_clock_drift_ms` configurable in `RuntimeConfig`
-
-**Missing:**
-- No actual NTP polling (requires external service)
-- No background drift monitor
-- No dual-timestamp discrepancy check
-
-### 1.4 Startup Sequence (5-Phase) — ✅ Built
-**Files:** `runtime.py`  
-**Spec:** §1.4
-
-All 5 phases implemented:
-- Phase 0: `PREFLIGHT` — config validation, clock check
-- Phase 1: `STORAGE` — stubbed (no DB layer yet)
-- Phase 2: `INTELLIGENCE_LOADING` — stubbed
-- Phase 3: `STATE_RECONSTRUCTION` — snapshot age validation
-- Phase 4: `EXTERNAL_CONNECTIONS` — degraded mode support
-- Phase 5: `SERVICES` — sets `state.ready = True`
-
-### 1.5 Shutdown Sequence — 🟡 Partial
-**Files:** `runtime.py`, `health_signals.py`  
-**Spec:** §1.5
-
-**Built:**
-- `shutdown()` with phase transition audit
-- Signal handlers for SIGTERM/SIGINT (via `SignalHandler`)
-- Graceful shutdown callback wiring
-
-**Missing:**
-- No HTTP server draining
-- No WebSocket client notification
-- No PIL checkpoint with partial snapshot
-- No database flush
-
-### 1.6 Error Taxonomy — ✅ Built
-**Files:** `errors.py`  
-**Spec:** §1.6
-
-- `APEXError` frozen dataclass with `code`, `category`, `severity`, `retryable`
-- `ErrorCategory`: VALIDATION, EXTERNAL, SYSTEM, DATA, CONCURRENCY
-- `ErrorSeverity`: CRITICAL, HIGH, MEDIUM, LOW
-- Factory functions for common errors
-
-### 1.7 Memory Management (MemoryGuard) — ✅ Built ⭐ NEW
-**Files:** `memory_guard.py`  
-**Spec:** §1.7
-
-- `MemoryGuard` class with `tracemalloc` snapshot comparison
-- `psutil.Process().memory_info().rss` monitoring
-- Leak rate detection (MB/hour)
-- Ceiling enforcement with graceful restart trigger
-- `weakref.WeakSet()` for event listeners
-- `BoundedCache` with LRU eviction
-- Background monitoring thread
-- Alert/restart callbacks
-
-**Validated:** ✅ Integration test passed
-
-### 1.8 Health Endpoints — ✅ Built ⭐ NEW
-**Files:** `health_signals.py`  
-**Spec:** §1.8
-
-- `HealthCheckSystem` with check registration
-- `GET /health/live` → `{"status": "alive"}`
-- `GET /health/ready` → 200/503 with check breakdown
-- `GET /health/startup` → phase reporting
-- `GET /admin/health/deep` → full diagnostics with memory info
-- HTTP server on configurable port
-
-**Validated:** ✅ Integration test passed
-
-### 1.9 Signal Handling — ✅ Built ⭐ NEW
-**Files:** `health_signals.py`  
-**Spec:** §1.5
-
-- `SignalHandler` class
-- SIGTERM/SIGINT → graceful shutdown
-- SIGHUP → configuration reload
-- SIGUSR1 → debug state dump to `/tmp/apex_debug_*.json`
-- SIGUSR2 → toggle verbose logging
-- Callback wiring for all signals
-
-**Validated:** ✅ Integration test passed
+The current codebase is best characterized as a broad alpha scaffold: several core modules exist, but the spec's load-bearing invariants still need deeper persistence, gate enforcement, observability, security, and end-to-end integration.
 
 ---
 
-## Phase 2: Core Layers — COMPLETE ✅
+## Status Legend
 
-### Cognitive Layer — ✅ Built
-**Files:** `cognitive.py`
-- `CognitiveLayer` with `CognitiveState`
-- `MemoryRecord`, `FailureRecord` dataclasses
-- State tracking and failure memory
-
-### Reactive Layer — ✅ Built
-**Files:** `reactive.py`, `why_engine.py`
-- `ReactiveLayer` with `IntentRouter` (3-tier)
-- `WhyLayer` / `WhyEngine` for decision explanation
-- `WhyContext`, `WhyExplanation` records
-
-### Reflection Layer — ✅ Built
-**Files:** `reflection.py`
-- `ReflectionLayer` with `ReflectionRecord`
-- Analytical debt scoring
+| Status | Meaning |
+|---|---|
+| 🔴 Absent | No meaningful implementation found |
+| 🟡 Stub / schema | Dataclasses, interfaces, or placeholders exist, but no production path |
+| 🟠 Partial | Logic exists, but is incomplete, unintegrated, or thinly tested |
+| 🟢 Implemented with tests | Has executable behavior and direct automated coverage |
 
 ---
 
-## Phase 3: Domain Models — COMPLETE ✅
+## Current Completion Map
 
-### Core Models (Sections 6-18) — ✅ Built
-**Files:** `core_models.py`
-
-- `EpistemicState`, `ConfidenceLevel` enums
-- `KnowledgeBoundary` with reliability scoring
-- `TickerIntelligenceFile` with thesis tracking & history
-- `ThesisChange` records with narration
-- `Guardrails` G1-G11 (all 11 guardrails)
-- `AbstainModeState` for Section 14
-
-**Validated:** ✅ All 11 guardrails passing
-
-### Proactive Intelligence (Sections 19-20) — ✅ Built
-**Files:** `proactive_intelligence.py`
-
-- `LearningEngine` with pattern registration
-- `KnowledgeApplicationEngine`
-- `PatternType` enum (7 types)
-- `LearnedPattern` with confidence/success tracking
-
-**Validated:** ✅ Pattern registration & application working
-
-### Second Order Analysis (Sections 24-25) — ✅ Built
-**Files:** `second_order_analysis.py`
-
-- `SecondOrderAnalysis` with causal chain detection
-- `EffectType` enum (5 types)
-- `NarrativeAgent` with consistency enforcement
-- Epistemic violation detection
-- Contradiction detection
-
-**Validated:** ✅ Inconsistency detection operational
-
-### Ethical Framework (Sections 21, 35) — ✅ Built
-**Files:** `ethical_framework.py`
-
-- `EthicalFramework` with all 8 axioms
-- `AxiomViolationSeverity` enum
-- `HumanFeedbackEngine`
-- `ExpertIntelligence` registration & weighting
-
-**Validated:** ✅ All 8 axioms evaluated
-
-### Analytical Debt Dashboard (Sections 29, 78) — ✅ Built
-**Files:** `analytical_debt.py`
-
-- `AnalyticalDebtDashboard` with debt tracking
-- `ComponentHealthScore` monitoring
-- `ThesisLifecycleManager`
-- Invalidation trigger detection
-
-**Validated:** ✅ Component health monitoring (healthy/critical)
+| Section | Title | Status | Notes |
+|---|---|---:|---|
+| 1.1 | Decimal arithmetic | 🟠 | `Decimal` helpers and policies exist; a mandatory G11 boundary gate is not yet proven across all tool I/O. |
+| 1.2 | Idempotency / outbox | 🟡 | Runtime cache and outbox concepts exist in memory; durable `processed_events`, transactional outbox, and DLQ tables are still needed. |
+| 1.3 | Clock authority | 🟡 | Drift configuration/check hooks exist; NTP authority and background enforcement remain absent. |
+| 1.4 | Startup sequence | 🟠 | Startup phases exist; the full 26-step gated sequence, migration lock, and schema-version abort path remain incomplete. |
+| 1.5 | Shutdown sequence | 🟠 | Signal and shutdown hooks exist; server draining, PIL checkpointing, and complete audit finalization remain incomplete. |
+| 1.6 | Error taxonomy | 🟠 | `APEXError` exists; taxonomy is not enforced at every API/tool/LLM boundary. |
+| 1.7 | Memory management | 🟠 | Memory guard and bounded cache exist; broader weak-reference and pressure-response integration remains limited. |
+| 1.8 | Health endpoints | 🟠 | Health functionality exists, but duplicate health modules still create consolidation risk. |
+| 2 | Configuration architecture | 🟠 | Config loader exists; complete five-tier resolution and live reload semantics need validation. |
+| 3 | Strategy layer | 🟠 | Registry and strategy structures exist; most strategy families are partial or scaffold-level. |
+| 4 | Tool layer | 🟠 | Tool registries and implementations exist; duplicate `BaseTool` paths and schema divergence remain. |
+| 5 | Data layer | 🟢 | In-memory `DataRegistry` has TTL, namespace isolation, LRU-style eviction, and tests; provenance, memory pressure thresholds, and durable backing are still missing. |
+| 6 | Cognitive architecture | 🟡 | Executive/controller structures exist; full three-tier intent router behavior remains unproven. |
+| 7 | Dual intelligence system | 🟡 | PIL structures exist; the scheduled six-subsystem proactive loop and warm-start protocol remain incomplete. |
+| 8-11 | Why Engine | 🟡 | Early explanation components exist; layers 2-5 and failure-aware historical analogs remain absent or stubbed. |
+| 12 | Decision Contract | 🟡 | Model/schema concepts exist; contracts are not fully populated and persisted for every signal. |
+| 13 | Confidence decomposition | 🔴 | Full component decomposition and deviation highlighting are not implemented. |
+| 14 | Abstain / NO_ACTION | 🟡 | Schema-level support exists; end-to-end abstain behavior needs integration tests. |
+| 15 | Guardrails G1-G11 | 🟠 | Some guardrail concepts exist; the mandatory G11 -> G1 -> ... -> G10 audited pipeline is not complete. |
+| 16 | Epistemic humility | 🟡 | Types exist; output-facing assessment and blind-operation warnings are not consistently surfaced. |
+| 17 | Cross-session continuity | 🟡 | Ticker intelligence structures exist; durable ticker files and lifecycle monitoring remain incomplete. |
+| 18 | Failure memory system | 🟡 | Failure dataclasses exist; durable records, fingerprint indexes, and pattern lifecycle automation remain missing. |
+| 19 | Learning engine | 🟡 | Class structures exist; live outcome resolution, calibration, and retraining triggers remain incomplete. |
+| 20 | Knowledge application engine | 🟡 | Early structures exist; no mandatory pre-pipeline `KnowledgeContext` assembly is enforced. |
+| 21 | Human feedback / expert intelligence | 🟡 | Schema-level work exists; HITL queue and expert observer flows remain absent. |
+| 22 | Knowledge forgetting | 🔴 | No meaningful implementation found. |
+| 23 | Behavioral guardian | 🔴 | Bias detection and confirmation-friction workflows are absent. |
+| 24 | Second-order reasoning | 🟡 | Module exists; full cascade analysis is not implemented end to end. |
+| 25 | Narrative agent | 🟡 | Narration scaffolding exists; disagreement-aware format is incomplete. |
+| 26 | Evolution engine | 🟡 | Scaffolding exists; shadow deployment and promotion workflow remain absent. |
+| 27 | Curiosity engine | 🔴 | No meaningful implementation found. |
+| 28 | Agent drift detection | 🔴 | Baseline capture and KL-divergence monitoring are absent. |
+| 29 | Analytical debt dashboard | 🟡 | Module exists; dashboard and PIL brief wiring remain incomplete. |
+| 30 | Financial risk architecture | 🟢 | Financial risk package and direct tests exist; full commission model, CVaR, stress scenarios, and factor exposure still need expansion. |
+| 31 | Cost visibility | 🟡 | Cost concepts exist; per-component attribution and budget enforcement remain incomplete. |
+| 32 | Observability stack | 🟡 | Observability module exists; full metric families, OTel tracing, and redaction pipeline remain incomplete. |
+| 33 | Security | 🟡 | Security concerns are not yet implemented as a full JWT/CSRF/RBAC layer. |
+| 34-91 | Advanced sections and appendices | 🔴/🟡 | War Room UI, MCP integration, WebSocket catalog, migrations, deployment, and operations are mostly absent or scaffolded. |
 
 ---
 
-## Phase 4: Strategy & Tool Layers — COMPLETE ✅
+## Highest-Risk Gaps
 
-### Strategy Layer (Section 3) — ✅ Built
-**Files:** `strategy.py` (625 lines)
-
-- `StrategyType`, `SignalStrength` enums
-- `StrategyPlugin` abstract base class
-- `StrategyRegistry`, `StrategySelector`
-- `StrategyAggregator` with signal combination
-- `StrategyPerformanceTracker`
-- Example momentum strategy implementation
-
-### Tool Layer (Section 4) — ✅ Built
-**Files:** `tools.py` (735 lines)
-
-- `ToolCategory`, `ToolExecutionStatus` enums
-- `ToolMetadata`, `ToolInputSchema`, `ToolOutputSchema`
-- `ToolExecutionRecord` with audit trail
-- `BaseTool` abstract class
-- Standard tools:
-  - `PriceNormalizationTool`
-  - `ReturnCalculationTool`
-  - `VolatilityCalculationTool`
-  - `DataValidationTool`
-- `ToolRegistry` with `create_standard_tool_registry()`
+1. **Numerical invariants:** monetary fields need a mandatory `G11NumericalTypeGate` before all other guardrails.
+2. **Durable idempotency:** exactly-once behavior requires database-backed `processed_events`, a transactional outbox, retry metadata, and DLQ alerts.
+3. **Subsystem duplication:** health, signal handling, and tools still have overlapping implementations that can diverge.
+4. **Guardrail completeness:** the full G1-G11 sequence must run for every evaluation and write audit records on rejection.
+5. **Persistence:** Data Registry, Failure Memory, Ticker Intelligence Files, Decision Contracts, and learning outcomes need durable stores.
+6. **Production envelope:** FastAPI/WebSocket API, auth, rate limiting, observability, tracing, and cost controls remain incomplete.
 
 ---
 
-## Integration Test Results
+## Near-Term Exit Criteria
 
-**File:** `tests/test_foundation_integration.py`
+The next milestone should be **structural integrity**, not new intelligence features:
 
-| Test | Status | Details |
-|------|--------|---------|
-| Memory Guard | ✅ PASS | RSS monitoring, leak detection, bounded cache eviction |
-| Health Check System | ✅ PASS | Live/ready/startup/deep endpoints, critical failure handling |
-| Signal Handler | ✅ PASS | All 5 signals wired, callbacks executed, debug dump created |
-| Concurrent Operation | ✅ PASS | Health + memory monitors running concurrently |
-
-**Result:** 4/4 tests passed (100%)
+- `git ls-files | grep __pycache__` returns no tracked bytecode.
+- `pip install -e .[dev]` succeeds with pinned runtime/dev dependencies.
+- Only one public health-check implementation and one signal-registration path remain.
+- Tool schema classes have a single source of truth; no runtime forward declarations remain.
+- Existing tests remain green, and coverage is added for `strategy.py`, `tools.py`, `guardrails`/core models, `numerics.py`, and `cognitive.py`.
 
 ---
 
-## Remaining Gaps vs. Full Specification
+## Planning Guidance
 
-### Tier 0 Foundation (Partial)
-- ❌ Database layer for transactional outbox pattern (§1.2)
-- ❌ NTP polling integration (§1.3)
-- ❌ Full 7-phase shutdown sequence (§1.5)
-- ❌ systemd unit file integration (§1.7)
+Use this document as the status baseline for remediation planning. A section should not be marked complete unless it has:
 
-### Missing Major Components (~56 sections)
-- ❌ Data Registry (Section 5)
-- ❌ Full Proactive Intelligence Layer components:
-  - Regime Intelligence
-  - Opportunity Scout
-  - Risk Monitor
-  - Cross-Asset Correlation Engine
-- ❌ Complete Intent Router production wiring
-- ❌ Full Observability Stack
-- ❌ Behavioral Finance Module
-- ❌ Cross-Session Continuity System
-- ❌ Failure Memory Systems integration
-- ❌ API serialization layer for monetary values
-- ❌ HTTP server for main application (only health endpoints)
-- ❌ WebSocket server for real-time updates
-- ❌ Plugin loading system
-- ❌ ML model checksum verification
-- ❌ Prompt template loading
-
----
-
-## Next Priority Builds
-
-### Phase 5: Data & Persistence
-1. Data Registry implementation
-2. Database abstraction layer (SQLAlchemy/asyncpg)
-3. Transactional outbox with persistent storage
-4. Idempotency cache with Redis/DB backend
-
-### Phase 6: Enhanced Intelligence
-1. Regime Intelligence module
-2. Opportunity Scout
-3. Risk Monitor with VaR/CVaR
-4. Cross-asset correlation engine
-
-### Phase 7: Production Hardening
-1. HTTP API server (FastAPI/Starlette)
-2. WebSocket server for streaming
-3. Full observability stack (metrics, tracing, logging)
-4. Kubernetes readiness/liveness probe integration
-
----
-
-## Conclusion
-
-The APEX v3 runtime now has a **strong foundational base** with:
-- ✅ All Tier 0 foundation modules either complete or partially implemented
-- ✅ All core cognitive/reactive/reflection layers operational
-- ✅ Complete domain models for epistemic reasoning, ethics, and analytical debt
-- ✅ Full strategy and tool layers with example implementations
-- ✅ **NEW:** Memory management with leak detection
-- ✅ **NEW:** Health endpoints (live/ready/startup/deep)
-- ✅ **NEW:** Signal handling (SIGTERM/SIGHUP/SIGUSR1/SIGUSR2)
-- ✅ All modules validated via import tests
-- ✅ Integration tests passing (4/4)
-
-**No stubs, dummy code, or placeholders** were used in any implemented module. All code is functional, tested, and wired into the package exports.
-
-**Current completion:** ~38% of full specification (35/91 sections)  
-**Foundation completeness:** ~85% of Tier 0 requirements
+1. executable implementation,
+2. integration into the runtime path,
+3. automated tests for success and failure paths, and
+4. clear persistence/observability behavior when the specification requires it.

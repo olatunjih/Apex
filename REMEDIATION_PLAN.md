@@ -1,231 +1,214 @@
-# APEX v3 Remediation Plan
+# APEX v3 Gap Analysis and Improvement Plan
 
-**Generated:** Based on comprehensive repository audit  
-**Priority:** Critical foundation integrity issues must be resolved before new feature development
+**Updated:** June 1, 2026
+**Repository:** `olatunjih/Apex`
+**Specification:** APEX v3 Unified Architecture Specification (91 sections, Appendices A-K)
 
 ---
 
 ## Executive Summary
 
-The APEX v3 codebase contains substantial engineering work (~14,500 LOC across 42 Python files) but suffers from **organic growth without consolidation**. The `BUILD_PROGRESS.md` report is materially misleading—it claims 20 files and ~4,647 LOC while ignoring the `agents/`, `ui/`, and `tools/core.py` subdirectories entirely.
+The APEX v3 repository contains substantial alpha-stage engineering work, but it is materially earlier than the unified specification requires. Several quick wins from the prior remediation plan are now complete or partially complete: tracked `__pycache__` files are absent, dependency manifests exist, and the current test suite passes. The remaining risk is architectural: duplicate subsystems, partial invariants, thin persistence, and many intelligence layers that are schemas rather than production flows.
 
-Three critical issues undermine production readiness:
-1. **Duplicate subsystems** (health, signals, tools) creating import-time collision risks
-2. **`__pycache__/` committed to Git** (22 files) causing cross-environment contamination
-3. **No dependency management** (`requirements.txt`/`pyproject.toml` missing)
+| Dimension | Current Assessment |
+|---|---:|
+| Python files under `src/` and `tests/` | 44 |
+| Python LOC under `src/` and `tests/` | ~15,766 |
+| Tests | 68 passing |
+| Spec sections touched | ~45-50 / 91 |
+| Production-ready coherent system | ~15-20% |
 
----
-
-## Issue Catalog
-
-### 1. Duplicate Subsystems (CRITICAL)
-
-#### 1.1 Health Check Systems
-| Module | Class | Size | Exports |
-|--------|-------|------|---------|
-| `apex_runtime/health.py` | `HealthChecker` | 220 lines | `/health/live`, `/health/ready`, `/health/startup`, `/admin/health/deep` |
-| `apex_runtime/health_signals.py` | `HealthCheckSystem` | 350+ lines | Same endpoints + signal handling |
-
-**Conflict:** Both modules expose identical HTTP endpoints with different dataclasses (`HealthResponse` vs `HealthStatus`). The `__init__.py` currently exports only `HealthChecker` from `health.py`, but `health_signals.py` is imported directly by tests.
-
-**Resolution:** Merge into single module. Recommended approach:
-- Keep `HealthCheckSystem` from `health_signals.py` (more complete implementation)
-- Remove `health.py` entirely
-- Update `__init__.py` to export `HealthCheckSystem` as `HealthChecker` for backward compatibility
-
-#### 1.2 Signal Handlers
-| Module | Class | Size | Signals Handled |
-|--------|-------|------|-----------------|
-| `apex_runtime/signal_handler.py` | `SignalHandler` | 7.4KB | SIGTERM, SIGINT, SIGHUP, SIGUSR1, SIGUSR2 |
-| `apex_runtime/health_signals.py` | `SignalHandler` | Embedded | Same signals |
-
-**Conflict:** Two separate `SignalHandler` classes with overlapping functionality. Import ambiguity creates risk of using wrong handler.
-
-**Resolution:** 
-- Keep standalone `signal_handler.py` (cleaner separation of concerns)
-- Remove embedded `SignalHandler` from `health_signals.py`
-- Have `health_signals.py` import from `signal_handler.py` if needed
-
-#### 1.3 Tool Layer Duplication
-| Module | Classes | Size | Notes |
-|--------|---------|------|-------|
-| `apex_runtime/tools.py` | `BaseTool`, `ToolRegistry`, `ToolMetadata`, `ToolResult` | 25KB | Original implementation |
-| `apex_runtime/tools/core.py` | `BaseTool`, `DataRegistry`, `ToolResult` | 16KB | Newer implementation with forward-declaration hack |
-
-**Conflict:** `tools/core.py` uses a fragile runtime initialization pattern:
-```python
-ToolMetadata = None
-ToolResult = None
-def _init_tool_classes(metadata_cls, result_cls):
-    global ToolMetadata, ToolResult
-    ToolMetadata = metadata_cls
-    ToolResult = result_cls
-```
-
-This will cause `TypeError` if initialization order changes.
-
-**Resolution:**
-- Consolidate schema classes (`ToolMetadata`, `ToolInputSchema`, `ToolOutputSchema`, `ToolResult`) into `tools/__init__.py` (already done partially)
-- Move all concrete tool implementations to `tools/core.py`
-- Remove duplicate `BaseTool` from `tools/core.py`, keep only in `tools.py`
-- Eliminate forward-declaration hack entirely
+The highest-leverage next step remains consolidation and invariant enforcement before adding new APEX intelligence features.
 
 ---
 
-### 2. `__pycache__/` Committed to Git (HIGH)
+## Part 1: Structural Issues to Fix Now
 
-**Current State:**
-```bash
-$ git ls-files --cached | grep __pycache__ | wc -l
-22
-```
+### 1.1 Duplicate Subsystems
 
-**Files committed:**
-- `apex_runtime/__pycache__/*.pyc` (20 files)
-- `apex_runtime/tools/__pycache__/*.pyc` (2 files)
+#### Health checks
 
-**Risk:** Cross-environment contamination, unnecessary repo bloat, potential bytecode mismatches between Python versions.
+Two modules expose overlapping health concepts:
 
-**Resolution:**
-```bash
-# Remove from git history
-git rm -r --cached apex_runtime/__pycache__
-git rm -r --cached apex_runtime/tools/__pycache__
-git commit -m "Remove __pycache__ from version control"
+- `src/apex_runtime/health.py` exposes `HealthChecker`.
+- `src/apex_runtime/health_signals.py` exposes `HealthCheckSystem` and health server helpers.
 
-# Ensure .gitignore is correct
-echo "__pycache__/" >> .gitignore
-echo "*.pyc" >> .gitignore
-```
+**Risk:** endpoint behavior and readiness semantics can diverge depending on import path.
 
----
+**Plan:** keep the richer health-check implementation, provide backward-compatible exports, and retire the duplicate module after tests move to the canonical API.
 
-### 3. Missing Dependency Management (HIGH)
+#### Signal handling
 
-**Current State:** No `requirements.txt`, `pyproject.toml`, or `setup.py`.
+Two signal handler classes remain:
 
-**Runtime Dependencies Identified:**
-- `psutil` (used in `memory_guard.py`, `health.py`, `health_signals.py`)
+- `src/apex_runtime/signal_handler.py`
+- embedded `SignalHandler` in `src/apex_runtime/health_signals.py`
 
-**Resolution:** Create `requirements.txt`:
-```txt
-# APEX v3 Runtime Dependencies
-psutil>=5.9.0
+**Risk:** multiple registration paths for process signals can produce surprising behavior in long-running runtime processes.
 
-# Development dependencies
-pytest>=7.0.0
-mypy>=1.0.0
-ruff>=0.1.0
-```
+**Plan:** keep `signal_handler.py` as the single registration path and make health code consume it instead of defining a second handler.
+
+#### Tool layer
+
+Two tool stacks remain:
+
+- `src/apex_runtime/tools.py`
+- `src/apex_runtime/tools/core.py` plus package exports in `src/apex_runtime/tools/__init__.py`
+
+**Risk:** duplicate `BaseTool`, registry, and result-schema concepts can drift and break runtime dispatch.
+
+**Plan:** define one canonical tool schema and registry surface, migrate concrete tools to it, and delete any forward-declaration or global-patching initialization patterns.
 
 ---
 
-### 4. Stale Build Progress Report (MEDIUM)
+### 1.2 Dependency and Packaging Hygiene
 
-**Claimed in `BUILD_PROGRESS.md`:**
-- 20 Python files
-- ~4,647 LOC
-- 35/91 sections (38%)
+Dependency manifests exist, but they must track the runtime imports and developer workflow.
 
-**Actual:**
-- 42 Python files
-- ~14,511 LOC
-- Untracked: `agents/` (4 files, ~47KB), `ui/` (7 files, ~170KB), `tools/core.py` (16KB)
+**Immediate updates in this remediation pass:**
 
-**Resolution:** Rewrite `BUILD_PROGRESS.md` with accurate metrics and full module inventory.
+- Add `psutil>=5.9.0,<6.0` to runtime dependencies because health and memory modules import it.
+- Add `ruff` and `mypy` to the development extras so lint/type checks are installable through `pip install -e .[dev]`.
+- Clean `.gitignore` formatting so ignore rules are plain gitignore patterns.
+
+**Follow-up:** periodically audit imports against `pyproject.toml` and `requirements.txt` as FastAPI, WebSocket, OpenTelemetry, and persistence layers are expanded.
 
 ---
 
-### 5. Test Coverage Gaps (MEDIUM)
+### 1.3 Fragile Dual-Mode Imports
 
-**Current Tests:**
-| File | Size | Scope |
-|------|------|-------|
-| `tests/test_runtime.py` | 2.7KB | Basic startup/idempotency tests (1 failing) |
-| `apex_runtime/tests/test_foundation_integration.py` | 10.5KB | MemoryGuard, HealthCheckSystem, SignalHandler (import fails) |
+Several modules still support direct script execution with patterns like `try: from .errors ... except ImportError: from errors ...`.
 
-**Coverage Estimate:** ~4-6% of codebase
+**Risk:** this weakens package cohesion and can hide import errors during tests.
 
-**Untested Critical Modules:**
-- `strategy.py` (625 lines)
-- `tools.py` (735 lines)
-- `cognitive.py`
-- `ethical_framework.py`
-- `analytical_debt.py`
-- `llm_orchestrator.py`
-- `continuous_learning.py`
-- `self_healing.py`
-- All `agents/*` modules
-- All `ui/*` modules
-
-**Resolution:** Prioritize testing core logic (`strategy.py`, `tools.py`, `cognitive.py`) to reach 60%+ coverage.
+**Plan:** remove fallback imports after CLI entry points are declared in `pyproject.toml` for any supported direct commands.
 
 ---
 
-### 6. Fragile Import Patterns (LOW)
+### 1.4 Testing and Coverage
 
-**Example from `strategy.py`:**
-```python
-try:
-    from .errors import APEXError, ...
-    from .numerics import enforce_decimal
-except ImportError:
-    from errors import APEXError, ...
-    from numerics import enforce_decimal
-```
+The current suite is green, but coverage remains concentrated.
 
-**Risk:** Encourages running modules as standalone scripts, breaking package cohesion.
+**Current baseline:** `pytest -q` reports 68 passing tests.
 
-**Resolution:** Remove fallback imports. If standalone execution is needed, use proper entry points or CLI modules.
+**Priority targets:**
 
----
+1. `strategy.py`
+2. `tools.py` and `tools/core.py`
+3. numerical policy and G11 behavior
+4. guardrail rejection/audit paths
+5. cognitive/executive routing
 
-## Implementation Roadmap
-
-### Phase 1: Foundation Integrity (Week 1)
-1. [ ] Remove `__pycache__/` from Git history
-2. [ ] Add `requirements.txt` with `psutil`
-3. [ ] Consolidate health check systems
-4. [ ] Consolidate signal handlers
-5. [ ] Fix tool layer duplication
-6. [ ] Fix failing test (`test_startup_degraded_mode`)
-
-### Phase 2: Tracking Alignment (Week 2)
-7. [ ] Rewrite `BUILD_PROGRESS.md` with accurate file counts
-8. [ ] Regenerate or remove `apex_gap_analysis.py`
-9. [ ] Document all 42 Python files and their purposes
-
-### Phase 3: Critical Gaps (Week 3-4)
-10. [ ] Implement proper Data Registry (§5) with TTL, namespaces, memory bounds
-11. [ ] Implement Financial Risk Architecture (§30) — position limits, VaR/CVaR
-12. [ ] Expand test coverage to 60%+ for core modules
-
-### Phase 4: Production Hardening (Week 5-6)
-13. [ ] Add persistent outbox backend (Redis/SQL)
-14. [ ] Add FastAPI server beyond health probes
-15. [ ] Add CI/CD pipeline (GitHub Actions)
-16. [ ] Add `pyproject.toml` for proper package installation
+**Goal:** reach at least 60% coverage on the highest-risk runtime modules before marking P0 features complete.
 
 ---
 
-## Verification Checklist
+## Part 2: Architectural Gaps vs. Spec
 
-After Phase 1 completion, verify:
-- [ ] `git ls-files | grep __pycache__` returns empty
-- [ ] `pip install -r requirements.txt` succeeds
-- [ ] Only one `HealthChecker`/`HealthCheckSystem` class exists
-- [ ] Only one `SignalHandler` class exists
-- [ ] No forward-declaration hacks in `tools/core.py`
-- [ ] All tests pass: `PYTHONPATH=/workspace python tests/test_runtime.py`
+### P0 — System Cannot Function as APEX Without These
+
+1. **G11 Numerical Type Gate:** every monetary tool/API boundary must reject non-`Decimal` values before G1 runs.
+2. **Durable Idempotent Event Processor:** replace in-memory dedupe with `processed_events`, transactional outbox, retry metadata, and DLQ alerting.
+3. **Startup Sequence Gating:** implement the full 26-step, five-phase startup with clock drift, schema version, config, migration lock, and degraded-startup semantics.
+4. **Data Registry v2:** extend the tested in-memory registry with spec keys, provenance, quality scoring, memory pressure thresholds, and durable integration where needed.
+5. **Full Guardrail Pipeline G1-G11:** run the mandatory sequence for every evaluation and write an audit trail for every rejection.
+
+### P1 — System Becomes a Basic Signal Generator Without These
+
+1. **Proactive Intelligence Layer:** scheduler, six subsystems, event emission, and snapshot/warm-start protocol.
+2. **Three-Tier Intent Router:** deterministic Tier 1, lightweight classifier Tier 2, and bounded LLM Tier 3 fallback.
+3. **Why Engine Layers 2-5:** regime, risk/thesis coherence, external signals, and failure-aware historical analogs.
+4. **Failure Memory System:** durable records, fingerprint indexes, root-cause taxonomy, and pattern lifecycle.
+5. **Learning Engine:** outcome resolution, Brier/calibration metrics, retraining triggers, shadow deployments, and promotion rules.
+6. **Cross-Session Continuity:** durable ticker intelligence files and position thesis lifecycle monitoring.
+7. **HTTP/WebSocket API:** full REST surface, WebSocket events, session management, backpressure, auth, CSRF, and rate limiting.
+
+### P2 — Intelligence Differentiators
+
+- Behavioral Guardian
+- Agent Drift Detection
+- Evolution Engine
+- Curiosity Engine
+- Knowledge Application Engine
+- Expert Observer Engine
+- VaR/CVaR and full financial risk architecture
+- Complete observability stack
+- Epistemic humility output contract
+- Confidence decomposition
+- Complete Decision Contract persistence
 
 ---
 
-## Bottom Line
+## Part 3: Roadmap
 
-The APEX v3 codebase has **genuine engineering substance**—the cognitive layer, strategy registry, tool layer, and UI substrate are functional and typed. However, it is **not at 38% completion** in a meaningful sense. More accurately:
+### Phase 0 — Structural Integrity
 
-- **Specification touched:** ~50% of 91 sections (some minimally)
-- **Coherent production system:** ~20% (missing risk architecture, persistence, deployment)
-- **Code quality:** Mixed (strong typing, but duplicate subsystems and stale tracking)
+1. Consolidate health checks to one public implementation.
+2. Consolidate signal handling to one registration path.
+3. Consolidate tool schemas, results, registry, and `BaseTool` definitions.
+4. Remove dual-mode import fallbacks after CLI entry points exist.
+5. Keep packaging manifests aligned with actual imports.
+6. Preserve a green test baseline after every consolidation PR.
 
-**Highest-leverage next step:** Consolidation and testing, **not** new feature development.
+**Exit criteria:** no duplicate health/signal/tool public classes remain, `pip install -e .[dev]` succeeds, and all existing tests pass.
+
+### Phase 1 — Foundational Invariants
+
+1. Implement `G11NumericalTypeGate` and tests for every monetary field family.
+2. Add durable idempotency and transactional outbox migrations.
+3. Implement outbox delivery worker with retries and DLQ alerting.
+4. Extend Data Registry with spec key format, provenance, quality scoring, and memory pressure behavior.
+5. Implement the audited G11 -> G1 -> ... -> G10 guardrail runner.
+
+### Phase 2 — Core Intelligence
+
+1. Complete startup/shutdown hardening and crash-restart detection.
+2. Implement Failure Memory persistence and pattern aggregation.
+3. Complete Why Engine layers 2-5.
+4. Build the PIL scheduler, Regime Intelligence, Strategy Readiness Monitor, and snapshot restore path.
+
+### Phase 3 — Session Intelligence and Learning
+
+1. Persist ticker intelligence files.
+2. Implement thesis change narration and lifecycle monitor.
+3. Implement outcome resolution and calibration metrics.
+4. Add Knowledge Application pre-pipeline context assembly.
+5. Benchmark the three-tier intent router against latency and routing-share targets.
+
+### Phase 4 — Production Hardening
+
+1. Add Prometheus metrics and OpenTelemetry spans for all pipeline stages.
+2. Add structured log redaction.
+3. Add JWT, CSRF, RBAC, and rate limiting.
+4. Implement WebSocket event catalog and backpressure semantics.
+5. Add CI gates for lint, type checking, tests, coverage, determinism, and dependency audit.
+
+### Phase 5 — Intelligence Differentiators
+
+Implement the Behavioral Guardian, drift detection, evolution/shadow deployments, curiosity engine, full risk architecture, confidence decomposition, epistemic humility, analytical debt dashboard, and complete Decision Contract storage.
+
+---
+
+## Part 4: Quick Wins
+
+- Keep tracked bytecode out of git; verify with `git ls-files | grep __pycache__`.
+- Keep `.gitignore` as plain patterns without markdown fences.
+- Keep runtime dependencies pinned when imports are introduced.
+- Add lint/type tooling to dev extras before enforcing CI gates.
+- Treat `docs/BUILD_PROGRESS.md` as a planning artifact and update it only with tested implementation status.
+
+---
+
+## Appendix: Non-Negotiable Invariants
+
+| Invariant | Enforcement Target |
+|---|---|
+| Monetary values are `Decimal`, never `float` | G11 at every tool/API boundary plus tests |
+| State-mutating events carry an idempotency key | Middleware and durable event processor |
+| Timestamps are UTC internally | Validators and code review gate |
+| `generate_signals()` is deterministic | CI parity test |
+| Raw exceptions never reach LLM/API responses | `APEXError` wrapping and redaction |
+| Tools do not call LLMs | Tool contract tests |
+| Order execution is never implemented | `NO_EXECUTION` guard at all exits |
+| Database monetary columns are `NUMERIC(28,10)` | Migration review gate |
+| JSON monetary serialization uses strings | Pydantic validators/serializers |
