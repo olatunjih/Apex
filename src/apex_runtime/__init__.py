@@ -52,7 +52,7 @@ from .tools import (
 from .memory_guard import MemoryGuard, MemorySnapshot, MemoryAlert, BoundedCache, DEFAULT_MEMORY_GUARD
 
 # Health & Signals (Sections 1.5, 1.8)
-from .health import HealthChecker, HealthCheckResult, HealthResponse, start_health_server, DEFAULT_HEALTH_CHECKER
+from .health_signals import HealthChecker, HealthCheckSystem, HealthCheckResult, HealthResponse, HealthStatus, start_health_server, DEFAULT_HEALTH_CHECKER
 from .signal_handler import SignalHandler, SignalHandlerContext, DEFAULT_SIGNAL_HANDLER
 
 # Observability (Section 32)
@@ -178,6 +178,8 @@ __all__ = [
     
     # Health & Signals (Sections 1.5, 1.8)
     "HealthChecker",
+    "HealthCheckSystem",
+    "HealthStatus",
     "HealthCheckResult",
     "HealthResponse",
     "start_health_server",

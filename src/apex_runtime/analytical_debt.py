@@ -8,10 +8,7 @@ from typing import List, Dict, Any, Optional, Set
 from dataclasses import dataclass, field
 from enum import Enum
 
-try:
-    from .core_models import ConfidenceLevel, TickerIntelligenceFile, EpistemicState
-except ImportError:
-    from core_models import ConfidenceLevel, TickerIntelligenceFile, EpistemicState
+from .core_models import ConfidenceLevel, TickerIntelligenceFile, EpistemicState
 
 
 class DebtCategory(Enum):

@@ -8,10 +8,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 
-try:
-    from .core_models import EpistemicState, ConfidenceLevel, TickerIntelligenceFile
-except ImportError:
-    from core_models import EpistemicState, ConfidenceLevel, TickerIntelligenceFile
+from .core_models import EpistemicState, ConfidenceLevel, TickerIntelligenceFile
 
 
 class PatternType(Enum):

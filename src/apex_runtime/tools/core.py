@@ -2,24 +2,11 @@
 from __future__ import annotations
 from decimal import Decimal
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Optional, TypeVar, Generic, Tuple
-from dataclasses import dataclass, field
-import hashlib
-import json
+from typing import Any, Dict, List, Optional, Tuple
 import uuid
 import math
 
-from ..errors import APEXError, ErrorCategory, ErrorSeverity
-from ..numerics import enforce_decimal
-
-# Forward declarations to avoid circular import
-ToolMetadata = None
-ToolResult = None
-
-def _init_tool_classes(metadata_cls, result_cls):
-    global ToolMetadata, ToolResult
-    ToolMetadata = metadata_cls
-    ToolResult = result_cls
+from . import ToolExecutionRecord, ToolExecutionStatus, ToolInputSchema, ToolMetadata, ToolOutputSchema, ToolResult
 
 # Data Registry
 class DataRegistry:
@@ -47,15 +34,6 @@ def _store_in_registry(namespace: str, ticker: str, data_type: str, content: Any
     _data_registry.put(full_key, content)
     return full_key
 
-T = TypeVar('T')
-
-@dataclass
-class ToolResult(Generic[T]):
-    success: bool
-    data_id: Optional[str] = None
-    error_code: Optional[str] = None
-    error_message: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
 
 class BaseTool:
     name: str = "base_tool"
@@ -73,7 +51,8 @@ class BaseTool:
             llm_free=True
         )
     
-    def validate_inputs(self, **kwargs): pass
+    def validate_inputs(self, **kwargs) -> bool:
+        return True
     def execute(self, **kwargs) -> ToolResult: raise NotImplementedError
 
 # Market Data Tools

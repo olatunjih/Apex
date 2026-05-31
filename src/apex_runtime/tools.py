@@ -13,12 +13,8 @@ from threading import RLock
 import hashlib
 import json
 
-try:
-    from .errors import APEXError, ErrorCategory, ErrorSeverity, validation_error
-    from .numerics import enforce_decimal
-except ImportError:
-    from errors import APEXError, ErrorCategory, ErrorSeverity, validation_error
-    from numerics import enforce_decimal
+from .errors import APEXError, ErrorCategory, ErrorSeverity, validation_error
+from .numerics import enforce_decimal
 
 
 class ToolCategory(Enum):

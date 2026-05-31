@@ -12,14 +12,9 @@ from typing import Dict, List, Optional, Any, Callable, Protocol, Set
 from threading import RLock
 import uuid
 
-try:
-    from .errors import APEXError, ErrorCategory, ErrorSeverity, validation_error
-    from .core_models import ConfidenceLevel, EpistemicState, TickerIntelligenceFile
-    from .numerics import enforce_decimal
-except ImportError:
-    from errors import APEXError, ErrorCategory, ErrorSeverity, validation_error
-    from core_models import ConfidenceLevel, EpistemicState, TickerIntelligenceFile
-    from numerics import enforce_decimal
+from .errors import APEXError, ErrorCategory, ErrorSeverity, validation_error
+from .core_models import ConfidenceLevel, EpistemicState, TickerIntelligenceFile
+from .numerics import enforce_decimal
 
 
 class StrategyType(Enum):
@@ -332,42 +327,50 @@ class StrategyAggregator:
         short_signals = [s for s in signals if s.direction == "short"]
         neutral_signals = [s for s in signals if s.direction == "neutral"]
         
-        # Determine aggregated direction
-        long_weight = sum(float(s.confidence) for s in long_signals) if long_signals else 0
-        short_weight = sum(float(s.confidence) for s in short_signals) if short_signals else 0
-        
-        if long_weight > short_weight * 1.2:  # 20% threshold for consensus
+        # Determine aggregated direction using Decimal arithmetic only.  The
+        # previous implementation converted confidence to floats and averaged
+        # only the winning side, which overstated confidence when strong
+        # dissenting signals were present.  Treat confidence as each signal's
+        # vote weight, then penalize the aggregate by the weighted consensus
+        # across *all* contributing signals.
+        long_weight = sum((s.confidence for s in long_signals), Decimal("0"))
+        short_weight = sum((s.confidence for s in short_signals), Decimal("0"))
+        neutral_weight = sum((s.confidence for s in neutral_signals), Decimal("0"))
+        total_weight = long_weight + short_weight + neutral_weight
+
+        consensus_threshold = Decimal("1.2")
+        if long_weight > short_weight * consensus_threshold:
             agg_direction = "long"
             direction_signals = long_signals
-        elif short_weight > long_weight * 1.2:
+            selected_weight = long_weight
+        elif short_weight > long_weight * consensus_threshold:
             agg_direction = "short"
             direction_signals = short_signals
-        elif long_signals or short_signals:
-            agg_direction = "neutral"
-            direction_signals = long_signals + short_signals
+            selected_weight = short_weight
         else:
             agg_direction = "neutral"
-            direction_signals = neutral_signals
-        
-        # Calculate aggregated confidence (weighted average)
-        if direction_signals:
-            total_weight = sum(float(s.confidence) for s in direction_signals)
-            avg_confidence = Decimal(str(total_weight / len(direction_signals)))
+            direction_signals = neutral_signals or (long_signals + short_signals)
+            selected_weight = neutral_weight if neutral_signals else min(long_weight, short_weight)
+
+        if total_weight > 0:
+            consensus = selected_weight / total_weight
+        else:
+            consensus = Decimal("0.0")
+
+        if direction_signals and selected_weight > 0:
+            weighted_confidence = (
+                sum((s.confidence * s.confidence for s in direction_signals), Decimal("0"))
+                / selected_weight
+            )
+            avg_confidence = min(Decimal("1.0"), weighted_confidence * consensus)
         else:
             avg_confidence = Decimal("0.0")
-        
-        # Calculate consensus score
-        if len(signals) > 1:
-            directions = [s.direction for s in signals]
-            same_direction = sum(1 for d in directions if d == agg_direction)
-            consensus = Decimal(str(same_direction)) / Decimal(str(len(signals)))
-        else:
-            consensus = Decimal("1.0")
-        
-        # Determine aggregated strength
-        strength_votes = {}
+
+        # Determine aggregated strength by confidence-weighted votes so many
+        # weak signals do not dominate fewer high-confidence signals.
+        strength_votes: Dict[SignalStrength, Decimal] = {}
         for s in signals:
-            strength_votes[s.strength] = strength_votes.get(s.strength, 0) + 1
+            strength_votes[s.strength] = strength_votes.get(s.strength, Decimal("0")) + s.confidence
         agg_strength = max(strength_votes.keys(), key=lambda k: strength_votes[k])
         
         # Check for epistemic consistency

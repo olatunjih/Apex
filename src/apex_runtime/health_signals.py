@@ -1,29 +1,23 @@
 """
-APEX v3 — Health Endpoints & Signal Handling
-Implements Section 1.8 (Health Endpoints) and Section 1.5 (Signal Handling)
+APEX v3 — Health Endpoints
+Implements Section 1.8 (Health Endpoints). Signal handling lives in signal_handler.py.
 
 Features:
 - GET /health/live, /health/ready, /health/startup, /admin/health/deep
-- SIGTERM, SIGINT, SIGHUP, SIGUSR1, SIGUSR2 handlers
-- Graceful shutdown with drain timeout
-- Debug state dump on SIGUSR1
 """
 
 from __future__ import annotations
-import signal
 import threading
 import time
 import json
 import os
-import sys
 from dataclasses import dataclass, asdict
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse
 import socketserver
 
-from .errors import APEXError
-from .runtime import RuntimeState, RuntimePhase
+from .runtime import RuntimePhase
 
 
 @dataclass
@@ -155,18 +149,21 @@ class HealthCheckSystem:
             "memory_info": self._get_memory_info(),
         }
 
-    def _get_memory_info(self) -> Dict[str, float]:
-        """Get current process memory info."""
-        try:
-            import psutil
-            process = psutil.Process(os.getpid())
-            mem = process.memory_info()
-            return {
-                "rss_mb": mem.rss / (1024 * 1024),
-                "vms_mb": mem.vms / (1024 * 1024),
-            }
-        except Exception:
-            return {"error": "unable to retrieve memory info"}
+    def _get_memory_info(self) -> Dict[str, Any]:
+        """Get current process memory info when psutil is available."""
+        from importlib.util import find_spec
+
+        if find_spec("psutil") is None:
+            return {"error": "psutil not available"}
+
+        import psutil
+
+        process = psutil.Process(os.getpid())
+        mem = process.memory_info()
+        return {
+            "rss_mb": mem.rss / (1024 * 1024),
+            "vms_mb": mem.vms / (1024 * 1024),
+        }
 
     def start_server(self, port: int = 8080, host: str = "0.0.0.0") -> None:
         """Start HTTP server for health endpoints."""
@@ -223,100 +220,27 @@ def make_health_handler(health_system: HealthCheckSystem) -> type:
     return HealthHTTPHandler
 
 
-class SignalHandler:
-    """
-    Manages Unix signal handlers for graceful shutdown and debugging.
-    Implements Section 1.5 signal handling requirements.
-    """
+# Canonical health checker name. HealthCheckSystem remains as a compatibility alias.
+HealthChecker = HealthCheckSystem
+HealthResponse = HealthStatus
+HealthCheckResult = HealthStatus
+DEFAULT_HEALTH_CHECKER = HealthChecker()
 
-    def __init__(
-        self,
-        shutdown_callback: Callable[[], None],
-        reload_callback: Optional[Callable[[], None]] = None,
-        debug_dump_callback: Optional[Callable[[], Dict[str, Any]]] = None,
-        toggle_logging_callback: Optional[Callable[[], None]] = None,
-    ):
-        self.shutdown_callback = shutdown_callback
-        self.reload_callback = reload_callback
-        self.debug_dump_callback = debug_dump_callback
-        self.toggle_logging_callback = toggle_logging_callback
-        
-        self._shutdown_requested = False
-        self._lock = threading.Lock()
-        self._original_handlers: Dict[int, Any] = {}
 
-    def install(self) -> None:
-        """Install all signal handlers."""
-        # Save original handlers
-        for sig in [signal.SIGTERM, signal.SIGINT, signal.SIGHUP, signal.SIGUSR1, signal.SIGUSR2]:
-            self._original_handlers[sig] = signal.getsignal(sig)
-        
-        # Install new handlers
-        signal.signal(signal.SIGTERM, self._handle_shutdown)
-        signal.signal(signal.SIGINT, self._handle_shutdown)
-        signal.signal(signal.SIGHUP, self._handle_reload)
-        signal.signal(signal.SIGUSR1, self._handle_debug_dump)
-        signal.signal(signal.SIGUSR2, self._handle_toggle_logging)
+def start_health_server(port: int = 8080, host: str = "0.0.0.0") -> threading.Thread:
+    """Start the canonical health server and return its background thread."""
+    DEFAULT_HEALTH_CHECKER.start_server(port=port, host=host)
+    assert DEFAULT_HEALTH_CHECKER._server_thread is not None
+    return DEFAULT_HEALTH_CHECKER._server_thread
 
-    def restore(self) -> None:
-        """Restore original signal handlers."""
-        for sig, handler in self._original_handlers.items():
-            try:
-                signal.signal(sig, handler)
-            except ValueError:
-                pass  # Signal may not be available on all platforms
 
-    @property
-    def shutdown_requested(self) -> bool:
-        return self._shutdown_requested
-
-    def _handle_shutdown(self, signum: int, frame) -> None:
-        """Handle SIGTERM/SIGINT for graceful shutdown."""
-        with self._lock:
-            if self._shutdown_requested:
-                # Already shutting down, force exit
-                os._exit(1)
-            self._shutdown_requested = True
-        
-        sig_name = "SIGTERM" if signum == signal.SIGTERM else "SIGINT"
-        print(f"\n[{sig_name}] Graceful shutdown initiated...", flush=True)
-        
-        # Call shutdown callback (should handle draining)
-        try:
-            self.shutdown_callback()
-        except Exception as e:
-            print(f"[ERROR] Shutdown callback failed: {e}", flush=True)
-            os._exit(1)
-
-    def _handle_reload(self, signum: int, frame) -> None:
-        """Handle SIGHUP for configuration reload."""
-        print("\n[SIGHUP] Reloading configuration...", flush=True)
-        if self.reload_callback:
-            try:
-                self.reload_callback()
-                print("[SIGHUP] Configuration reloaded successfully", flush=True)
-            except Exception as e:
-                print(f"[SIGHUP ERROR] Reload failed: {e}", flush=True)
-
-    def _handle_debug_dump(self, signum: int, frame) -> None:
-        """Handle SIGUSR1 for debug state dump."""
-        print("\n[SIGUSR1] Dumping debug state...", flush=True)
-        if self.debug_dump_callback:
-            try:
-                dump = self.debug_dump_callback()
-                dump_file = f"/tmp/apex_debug_{os.getpid()}_{int(time.time())}.json"
-                with open(dump_file, 'w') as f:
-                    json.dump(dump, f, indent=2, default=str)
-                print(f"[SIGUSR1] Debug state written to {dump_file}", flush=True)
-            except Exception as e:
-                print(f"[SIGUSR1 ERROR] Dump failed: {e}", flush=True)
-
-    def _handle_toggle_logging(self, signum: int, frame) -> None:
-        """Handle SIGUSR2 for toggling verbose logging."""
-        print("\n[SIGUSR2] Toggling verbose logging...", flush=True)
-        if self.toggle_logging_callback:
-            try:
-                self.toggle_logging_callback()
-                print("[SIGUSR2] Logging level toggled", flush=True)
-            except Exception as e:
-                print(f"[SIGUSR2 ERROR] Toggle failed: {e}", flush=True)
+__all__ = [
+    "HealthStatus",
+    "HealthCheckSystem",
+    "HealthChecker",
+    "HealthResponse",
+    "HealthCheckResult",
+    "make_health_handler",
+    "start_health_server",
+    "DEFAULT_HEALTH_CHECKER",
+]

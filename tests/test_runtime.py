@@ -1,8 +1,22 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
+import signal
 import unittest
 
-from apex_runtime import ApexRuntime, RuntimeConfig, RuntimePhase, enforce_decimal
+from apex_runtime import (
+    ApexRuntime,
+    RuntimeConfig,
+    RuntimePhase,
+    HealthChecker,
+    HealthCheckSystem,
+    SignalHandler,
+    SignalStrength,
+    StrategyAggregator,
+    StrategySignal,
+    EpistemicState,
+    create_standard_tool_registry,
+    enforce_decimal,
+)
 from apex_runtime.errors import APEXError
 from apex_runtime.reactive import AnalysisRequest, ReactiveLayer
 from apex_runtime.cognitive import CognitiveLayer
@@ -56,6 +70,62 @@ class TestReactiveLayer(unittest.TestCase):
         self.assertIn("failure_rate", decision.why.evidence_quality)
         self.assertIn("loss_adjustment", decision.why.confidence_calibration)
         self.assertGreaterEqual(layer.reflection.analytical_debt_score(), 0.0)
+
+
+class TestPhase0Stabilization(unittest.TestCase):
+    def _signal(self, sid, direction, confidence, strength=SignalStrength.STRONG):
+        return StrategySignal(
+            signal_id=sid,
+            strategy_id=f"strategy_{sid}",
+            ticker="AAPL",
+            timestamp=datetime.now(timezone.utc),
+            direction=direction,
+            strength=strength,
+            confidence=Decimal(confidence),
+            target_price=None,
+            stop_loss=None,
+            time_horizon_days=5,
+            rationale="test",
+            epistemic_state=EpistemicState.PROBABLE,
+        )
+
+    def test_strategy_aggregation_penalizes_dissenting_confidence(self):
+        aggregator = StrategyAggregator()
+        signal = aggregator.aggregate_signals(
+            "AAPL",
+            [
+                self._signal("long", "long", "0.90", SignalStrength.STRONG),
+                self._signal("short", "short", "0.60", SignalStrength.MODERATE),
+            ],
+        )
+
+        self.assertEqual(signal.aggregated_direction, "long")
+        self.assertEqual(signal.consensus_score, Decimal("0.6"))
+        self.assertEqual(signal.aggregated_confidence, Decimal("0.540"))
+
+    def test_tool_metadata_is_initialized_without_forward_declaration(self):
+        registry = create_standard_tool_registry()
+        tool = registry.get("fetch_market_data")
+
+        self.assertIsNotNone(tool)
+        metadata = tool.get_metadata()
+        self.assertEqual(metadata.tool_id, "fetch_market_data")
+        self.assertTrue(metadata.stateless)
+        self.assertTrue(metadata.llm_free)
+
+    def test_health_checker_uses_canonical_health_system(self):
+        self.assertIs(HealthChecker, HealthCheckSystem)
+        checker = HealthChecker()
+        checker.register_check("ready_test", lambda: (True, "ok", None))
+        ready = checker.get_ready_status()
+        self.assertEqual(ready.status, "healthy")
+        self.assertIn("ready_test", ready.checks)
+
+    def test_signal_debug_dump_does_not_fail_on_asdict(self):
+        handler = SignalHandler()
+        handler.toggle_verbose_logging(signal.SIGUSR2, None)
+        handler.dump_debug_state(signal.SIGUSR1, None)
+        self.assertEqual(handler.get_signal_history()[-1].result, "success")
 
 
 if __name__ == "__main__":
