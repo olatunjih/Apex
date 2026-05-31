@@ -4,22 +4,9 @@ from decimal import Decimal
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, TypeVar, Generic, Tuple
 from dataclasses import dataclass, field
-import hashlib
-import json
+from enum import Enum
 import uuid
 import math
-
-from ..errors import APEXError, ErrorCategory, ErrorSeverity
-from ..numerics import enforce_decimal
-
-# Forward declarations to avoid circular import
-ToolMetadata = None
-ToolResult = None
-
-def _init_tool_classes(metadata_cls, result_cls):
-    global ToolMetadata, ToolResult
-    ToolMetadata = metadata_cls
-    ToolResult = result_cls
 
 # Data Registry
 class DataRegistry:
@@ -47,6 +34,56 @@ def _store_in_registry(namespace: str, ticker: str, data_type: str, content: Any
     _data_registry.put(full_key, content)
     return full_key
 
+
+@dataclass(frozen=True)
+class ToolInputSchema:
+    name: str
+    field_type: type
+    required: bool = True
+    description: str = ""
+
+
+@dataclass(frozen=True)
+class ToolOutputSchema:
+    name: str
+    field_type: type
+    description: str = ""
+
+
+class ToolExecutionStatus(Enum):
+    SUCCESS = "success"
+    FAILURE = "failure"
+    TIMEOUT = "timeout"
+    VALIDATION_ERROR = "validation_error"
+
+
+@dataclass(frozen=True)
+class ToolMetadata:
+    tool_id: str
+    name: str
+    version: str
+    description: str
+    input_schema: tuple[ToolInputSchema, ...]
+    output_schema: tuple[ToolOutputSchema, ...]
+    stateless: bool = True
+    llm_free: bool = True
+
+
+@dataclass
+class ToolExecutionRecord:
+    execution_id: str
+    tool_id: str
+    started_at: float
+    completed_at: Optional[float]
+    status: ToolExecutionStatus
+    input_data: Dict[str, Any]
+    output_data: Optional[Dict[str, Any]]
+    error_message: Optional[str]
+    duration_ms: float
+    data_ids_read: tuple = ()
+    data_ids_written: tuple = ()
+
+
 T = TypeVar('T')
 
 @dataclass
@@ -73,7 +110,8 @@ class BaseTool:
             llm_free=True
         )
     
-    def validate_inputs(self, **kwargs): pass
+    def validate_inputs(self, **kwargs) -> bool:
+        return True
     def execute(self, **kwargs) -> ToolResult: raise NotImplementedError
 
 # Market Data Tools
