@@ -9,7 +9,7 @@ import time
 import json
 from typing import Callable, Optional, Dict, Any
 from threading import Event, Lock
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 @dataclass
 class SignalEvent:
