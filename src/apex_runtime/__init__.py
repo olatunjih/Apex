@@ -61,6 +61,17 @@ from .observability import (
     DEFAULT_METRICS, DEFAULT_TRACER, DEFAULT_COST_TRACKER
 )
 
+# Data Registry (Section 5) - new first-class module
+from .data_registry import DataRegistry, RegistryEntry
+
+# Financial Risk (Section 30, 31)
+from .financial_risk import (
+    FinancialRiskEngine,
+    PositionLimitEnforcer,
+    CostBudgetTracker,
+    RiskConfig,
+)
+
 __all__ = [
     # Original exports
     "RuntimeConfig",
@@ -195,4 +206,14 @@ __all__ = [
     "DEFAULT_METRICS",
     "DEFAULT_TRACER",
     "DEFAULT_COST_TRACKER",
+    
+    # Data Registry (Section 5)
+    "DataRegistry",
+    "RegistryEntry",
+    
+    # Financial Risk (Section 30, 31)
+    "FinancialRiskEngine",
+    "PositionLimitEnforcer",
+    "CostBudgetTracker",
+    "RiskConfig",
 ]
